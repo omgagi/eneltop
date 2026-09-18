@@ -1,0 +1,16 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+node_modules/
+__pycache__/
+*.pyc
+*.log
+payments.json
+dodo-events.jsonl
+waitlist.json
+visits.json
+visitor-secret
+dodo-live-api-key
+dodo-webhook-secret
+assets/avatars/

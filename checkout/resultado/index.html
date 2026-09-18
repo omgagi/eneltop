@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Estado del pago — eneltop.com</title>
+  <link rel="stylesheet" href="../../styles.css?v=25">
+  <style>.payment-result{max-width:560px;margin:12vh auto;padding:32px;border:1px solid var(--line);border-radius:20px;background:#fff;text-align:center}.payment-result h1{margin:8px 0 16px}.payment-result p{color:var(--muted);line-height:1.6}.payment-result>a:not(.brand){display:inline-block;margin-top:18px;background:var(--coral);color:#fff;border-radius:99px;padding:13px 24px;font-weight:800}.payment-result>a[hidden]{display:none}.payment-result #invoice-link{display:block;width:max-content;max-width:100%;margin:14px auto 0;background:transparent;color:var(--coral);padding:4px 8px;text-decoration:underline}.payment-result #invoice-link[hidden]{display:none}</style>
+</head>
+<body>
+  <main class="payment-result">
+    <a class="brand" href="/" aria-label="eneltop.com, inicio"><span class="brand-symbol"><i></i><i></i><i></i></span><span>eneltop<span class="brand-period">.com</span></span></a>
+    <h1 id="result-title">Comprobando el pago…</h1>
+    <p id="result-message">Tu proyecto se publicará cuando recibamos la confirmación de Dodo Payments.</p>
+    <a id="ranking-link" href="/">Ver mi puesto en el ranking</a>
+    <a id="invoice-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Ver factura de Dodo Payments</a>
+  </main>
+  <script>
+    const id=new URLSearchParams(location.search).get('pedido');
+    async function check(){
+      if(!id){document.getElementById('result-title').textContent='Pedido no encontrado';return}
+      try{const response=await fetch('/api/checkout/status?id='+encodeURIComponent(id),{cache:'no-store'});if(!response.ok)throw new Error();const order=await response.json();
+        if(order.status==='paid'){document.getElementById('result-title').textContent='¡Pago confirmado!';document.getElementById('result-message').textContent='Tu proyecto ya aparece en '+order.category+'.';document.getElementById('ranking-link').href='/?proyecto='+encodeURIComponent(id)+'#ranking';if(order.invoiceUrl){const link=document.getElementById('invoice-link');link.href=order.invoiceUrl;link.hidden=false}return}
+        if(order.status==='refunded'){document.getElementById('result-title').textContent='Pago reembolsado';document.getElementById('result-message').textContent='El proyecto ya no ocupa un puesto de pago.';return}
+        if(order.status==='failed'){document.getElementById('result-title').textContent='Pago no iniciado';document.getElementById('result-message').textContent='Vuelve al ranking para intentarlo de nuevo.';return}
+        setTimeout(check,3000);
+      }catch{document.getElementById('result-title').textContent='No se pudo consultar el estado';document.getElementById('result-message').textContent='Vuelve a intentarlo en unos minutos.'}
+    }
+    check();
+  </script>
+</body>
+</html>

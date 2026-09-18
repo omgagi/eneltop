@@ -1,0 +1,18 @@
+[Unit]
+Description=eneltop.com visit counter
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+ExecStart=/usr/bin/node /opt/eneltop/visits-server.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/eneltop
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
