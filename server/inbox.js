@@ -6,6 +6,19 @@ const payments = require('./payments');
 const directory = process.env.ENELTOP_DATA_DIR || '/var/lib/eneltop';
 const file = path.join(directory, 'inbox.json');
 const validId = /^[0-9a-f-]{36}$/;
+const activeMembers = new Map();
+const onlineWindow = 45_000;
+
+function setPresence(email, active) {
+  if (active) activeMembers.set(email, Date.now());
+  else activeMembers.delete(email);
+}
+function isOnline(email) {
+  const lastSeen = activeMembers.get(email) || 0;
+  if (Date.now() - lastSeen < onlineWindow) return true;
+  activeMembers.delete(email);
+  return false;
+}
 
 function read() {
   if (!fs.existsSync(file)) return { threads: [] };
@@ -25,6 +38,10 @@ function list(email) {
     .map(thread => ({
       id: thread.id, listingId: thread.listingId, listingName: thread.listingName,
       contactName: thread.ownerEmail === email ? thread.senderName : thread.listingName,
+      contactLogo: thread.ownerEmail === email
+        ? payments.ownedProjects(thread.senderEmail)[0]?.logo || null
+        : payments.shareProject(thread.listingId)?.logo || null,
+      contactOnline: isOnline(thread.ownerEmail === email ? thread.senderEmail : thread.ownerEmail),
       updatedAt: thread.updatedAt,
       unreadCount: thread.messages.filter(item => item.from !== email && !item.readAt).length,
       messages: thread.messages.map(item => ({ id: item.id, mine: item.from === email,
@@ -93,4 +110,4 @@ function markNotified(messageId) {
   save(state);
 }
 
-module.exports = { list, send, markRead, pendingNotifications, markNotified };
+module.exports = { list, send, markRead, setPresence, pendingNotifications, markNotified };

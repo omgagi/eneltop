@@ -182,6 +182,15 @@ const server = http.createServer((request, response) => {
   if (request.url?.startsWith('/api/auth/verify?') && request.method === 'POST') return accounts.verify(request, response);
   if (request.url === '/api/auth/logout' && request.method === 'POST') return accounts.logout(request, response);
   if (request.url === '/api/account' && request.method === 'GET') return accounts.account(request, response);
+  if (request.url === '/api/account/presence' && request.method === 'POST') {
+    if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    return payments.readJson(request, 1000).then(input => {
+      inbox.setPresence(email, input?.active !== false);
+      return payments.send(response, 200, { ok: true });
+    }).catch(() => payments.send(response, 400, { error: 'Estado inválido' }));
+  }
   if (request.url === '/api/account/messages' && request.method === 'GET') {
     const email = accounts.currentEmail(request);
     if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });

@@ -28,6 +28,11 @@ test('solo los miembros pueden escribir y cada participante ve su conversación 
   assert.equal(inbox.list('stranger@example.com').length, 0);
   const received = inbox.list('owner@example.com')[0];
   assert.equal(received.contactName, 'Proyecto Dos');
+  assert.equal(received.contactOnline, false);
+  inbox.setPresence('sender@example.com', true);
+  assert.equal(inbox.list('owner@example.com')[0].contactOnline, true);
+  inbox.setPresence('sender@example.com', false);
+  assert.equal(inbox.list('owner@example.com')[0].contactOnline, false);
   assert.equal(received.messages[0].text, 'Hola');
   assert.equal(received.unreadCount, 1);
   assert.equal(inbox.list('sender@example.com')[0].unreadCount, 0);
