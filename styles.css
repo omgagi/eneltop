@@ -237,3 +237,13 @@ dialog{border:0;border-radius:17px;width:min(460px,calc(100% - 24px));padding:23
 .dark .success-check{background:#183c31;color:#7de2a6}
 .payments-ready .demo-strip{display:none}
 .payments-ready #payment-footer-alert{display:none}
+.checkout-code-step{border:1px solid #c9dce7;border-radius:12px;background:#f2f8fb;padding:13px;margin:-2px 0 14px}
+.checkout-code-step[hidden],.checkout-email-status[hidden]{display:none}
+.checkout-code-step p{margin:0 0 8px;color:var(--text);font-size:12px;line-height:1.5}
+.checkout-code-step label{margin-bottom:8px!important}
+.checkout-code-step button{border:0;border-radius:8px;background:#17566d;color:#fff;padding:10px 13px;font:800 12px Manrope,sans-serif;cursor:pointer}
+.checkout-code-step .checkout-resend-code{background:transparent;color:#17566d}
+.checkout-email-status{margin:-3px 0 13px;padding:9px;border-radius:8px;background:#e8f5ee;color:#145c3b;font-size:12px;font-weight:700}
+.checkout-email-status.error{background:#fff0ed;color:#a13c29}
+.dark .checkout-code-step{background:#203849;border-color:#446070}
+.dark .checkout-code-step .checkout-resend-code{color:#a8dce9}

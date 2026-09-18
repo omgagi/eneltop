@@ -162,11 +162,14 @@ const server = http.createServer((request, response) => {
     try { return payments.send(response, 200, { projects: payments.publicRanking(), paymentsEnabled: payments.enabled() }); }
     catch (error) { console.error(error); return payments.send(response, 500, { error: 'Ranking unavailable' }); }
   }
-  if (request.url === '/api/checkout' && request.method === 'POST') return payments.checkout(request, response);
+  if (request.url === '/api/checkout' && request.method === 'POST') return payments.checkout(request, response, accounts.currentEmail(request));
   if (request.url === '/api/auth/request' && request.method === 'POST') return accounts.requestLink(request, response);
+  if (request.url === '/api/auth/checkout-code/request' && request.method === 'POST') return accounts.requestCheckoutCode(request, response);
+  if (request.url === '/api/auth/checkout-code/verify' && request.method === 'POST') return accounts.verifyCheckoutCode(request, response);
   if (request.url?.startsWith('/api/auth/verify?') && request.method === 'POST') return accounts.verify(request, response);
   if (request.url === '/api/auth/logout' && request.method === 'POST') return accounts.logout(request, response);
   if (request.url === '/api/account' && request.method === 'GET') return accounts.account(request, response);
+  if (request.url === '/api/account/recovery' && request.method === 'POST') return accounts.requestRecovery(request, response);
   if (request.url?.startsWith('/api/account/bid/') && request.method === 'POST') {
     if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
     const email = accounts.currentEmail(request);

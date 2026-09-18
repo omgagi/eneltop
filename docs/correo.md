@@ -9,7 +9,22 @@ Estado comprobado el **18 de septiembre de 2026**: Postmark aprobó la cuenta pa
 3. El navegador confirma el enlace mediante `POST /api/auth/verify`; la sesión dura 30 días y se guarda en una cookie `HttpOnly`, `Secure` y `SameSite=Lax`.
 4. La cuenta solo muestra proyectos cuyo correo de comprador confirmado por Dodo coincide con el correo autenticado. El dueño puede corregir la URL o el logo y hacer una nueva oferta. Los cambios de posición siguen dependiendo del webhook de pago confirmado.
 
-El servidor limita las solicitudes a tres por dirección en 15 minutos y quince por IP en una hora. Los hashes de enlaces y sesiones se guardan en `/var/lib/eneltop/accounts.json`, fuera del repositorio. El endpoint de solicitud exige origen propio y JSON.
+Antes de una compra nueva, el formulario solicita el correo y envía un código de seis dígitos mediante `POST /api/auth/checkout-code/request`. `POST /api/auth/checkout-code/verify` lo valida, crea la misma sesión de cuenta y permite abrir el pago. El código caduca en 10 minutos, tiene un máximo de cinco intentos y no se guarda en claro. Si ya hay una sesión para ese correo, no se envía otro código. `/api/checkout` rechaza peticiones sin sesión o con un correo distinto al verificado. El checkout de Dodo recibe ese correo prellenado. Aunque el comprador modifique en Dodo su correo de facturación, la ficha queda bajo el correo que verificó antes del pago; el correo de Dodo queda en `payerEmail` para auditoría. Las compras anteriores conservan la asociación histórica con el correo de Dodo.
+
+El servidor limita las solicitudes de enlace y código a tres por dirección en 15 minutos y quince por IP en una hora. Los hashes de enlaces, códigos y sesiones se guardan en `/var/lib/eneltop/accounts.json`, fuera del repositorio. Los endpoints de autenticación exigen origen propio y JSON.
+
+### Corrección de correo de compras anteriores
+
+En `/cuenta/`, una persona que ya verificó su nuevo correo puede solicitar una revisión con el enlace público del puesto. `POST /api/account/recovery` guarda la solicitud en `accounts.json` y, si se configuró `ENELTOP_RECOVERY_EMAIL`, avisa al operador. **Enviar la solicitud nunca transfiere el puesto.** El enlace público y el identificador de pago no son prueba suficiente de propiedad.
+
+Procedimiento de operador en `ai1`:
+
+1. Ejecutar `sudo -n node /opt/eneltop/scripts/review-ownership.js list` y localizar la solicitud. No compartir el listado, que contiene correos y referencias de pago.
+2. Comprobar de forma independiente en Dodo el pago y la identidad del comprador mediante los datos disponibles en Dodo y la evidencia que aporte el solicitante por un canal seguro. No aprobar basándose solo en el enlace del puesto, el número de pedido o el ID de pago.
+3. Detener `eneltop-visits.service` para evitar escrituras simultáneas; ejecutar `sudo -n node /opt/eneltop/scripts/review-ownership.js approve REQUEST_UUID DODO_PAYMENT_ID "referencia de prueba revisada"`; iniciar de nuevo el servicio.
+4. Confirmar que el nuevo correo ve el puesto en `/cuenta/` y documentar la decisión. El script conserva el propietario anterior y la referencia de revisión en `accounts.json`.
+
+La cola requiere revisión humana. Si se configura un correo para avisos, el operador recibe una notificación nueva, pero la solicitud se conserva aunque falle ese aviso.
 
 ## Postmark en producción
 
@@ -18,6 +33,7 @@ El servidor limita las solicitudes a tres por dirección en 15 minutos y quince 
 - La clave requerida es un **Server API Token** de ese servidor, nunca el Account API Token ni un SMTP Token. Archivo privado en `ai1`: `/var/lib/eneltop/postmark-server-token`, propietario `www-data`, modo `0600`. Existe una copia local en `~/Downloads/postmark-server-token`, también privada. No copiar valores de claves al repositorio, tickets, capturas ni chats.
 - `server/accounts.js` lee la clave al enviar y llama a `https://api.postmarkapp.com/email` con `MessageStream: "outbound"`. No hace falta reiniciar el servicio después de reemplazar el archivo.
 - Nginx dirige `/api/auth/request` al proceso Node de `eneltop-visits.service`; el sitio se sirve desde `/var/www/eneltop.com` y el servidor Node desde `/opt/eneltop`.
+- El panel de Postmark mostraba un cupo de **100 correos por período** al aprobar la cuenta. Cada verificación previa al pago y cada enlace de acceso consume un envío; revisar o ampliar el cupo antes de aumentar el tráfico.
 
 ### Registros DNS en Hostinger
 
@@ -65,3 +81,4 @@ Con solo la clave de Postmark instalada, Postmark es el proveedor usado. Si exis
 - [Aprobación de cuentas en Postmark](https://postmarkapp.com/support/article/1084-how-does-the-account-approval-process-work)
 - [Ubicación y tipos de tokens](https://postmarkapp.com/support/article/1008-what-are-the-account-and-server-api-tokens)
 - [Rotación de Server API Tokens](https://postmarkapp.com/support/article/1293-how-to-cycle-a-server-api-token)
+- [Sesiones de checkout de Dodo con correo de cliente](https://docs.dodopayments.com/developer-resources/integration-guide)

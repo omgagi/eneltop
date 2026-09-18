@@ -68,3 +68,59 @@ test('usa Postmark cuando se configura un token de servidor', async () => {
     assert.match(payload.TextBody, /\/cuenta\/\?token=/);
   } finally { global.fetch = originalFetch; delete process.env.ENELTOP_MAIL_PROVIDER; }
 });
+
+test('el código de compra verifica el correo una vez y crea una sesión', async () => {
+  const originalFetch = global.fetch;
+  let code;
+  global.fetch = async (_url, options) => {
+    const body = JSON.parse(options.body);
+    code = (body.TextBody || body.text).match(/\b\d{6}\b/)[0];
+    return { ok: true };
+  };
+  try {
+    const sent = response();
+    await accounts.requestCheckoutCode(request('/api/auth/checkout-code/request', { email: 'New@Example.com' }), sent);
+    assert.equal(sent.status, 200);
+    assert.match(code, /^\d{6}$/);
+    const wrong = response();
+    await accounts.verifyCheckoutCode(request('/api/auth/checkout-code/verify', { email: 'new@example.com', code: 'abcdef' }), wrong);
+    assert.equal(wrong.status, 400);
+    const verified = response();
+    await accounts.verifyCheckoutCode(request('/api/auth/checkout-code/verify', { email: 'new@example.com', code }), verified);
+    assert.equal(verified.status, 200);
+    const session = verified.headers['Set-Cookie'].split(';')[0];
+    assert.equal(accounts.currentEmail(request('/api/account', undefined, session)), 'new@example.com');
+    const replay = response();
+    await accounts.verifyCheckoutCode(request('/api/auth/checkout-code/verify', { email: 'new@example.com', code }), replay);
+    assert.equal(replay.status, 400);
+  } finally { global.fetch = originalFetch; }
+});
+
+test('la recuperación requiere una sesión verificada y nunca cambia el propietario automáticamente', async () => {
+  const orderId = '50f391c5-34b1-456e-a272-2cac2b03ae66';
+  fs.writeFileSync(path.join(directory, 'payments.json'), JSON.stringify({ orders: [{
+    id: orderId, status: 'paid', customerEmail: 'wrong@example.com',
+    paymentId: 'pay_recovery', name: 'Recuperar', description: 'Prueba',
+    url: 'https://example.com/', category: 'Otros', cents: 50
+  }], processed: [] }));
+  const denied = response();
+  await accounts.requestRecovery(request('/api/account/recovery', { orderId, note: 'Correo equivocado' }), denied);
+  assert.equal(denied.status, 401);
+  const originalFetch = global.fetch;
+  let code;
+  global.fetch = async (_url, options) => { code = JSON.parse(options.body).text.match(/\b\d{6}\b/)[0]; return { ok: true }; };
+  try {
+    const sent = response();
+    await accounts.requestCheckoutCode(request('/api/auth/checkout-code/request', { email: 'correct@example.com' }), sent);
+    const verified = response();
+    await accounts.verifyCheckoutCode(request('/api/auth/checkout-code/verify', { email: 'correct@example.com', code }), verified);
+    const session = verified.headers['Set-Cookie'].split(';')[0];
+    const accepted = response();
+    await accounts.requestRecovery(request('/api/account/recovery', { orderId, note: 'Escribí mal el correo' }, session), accepted);
+    assert.equal(accepted.status, 200);
+    const state = JSON.parse(fs.readFileSync(path.join(directory, 'accounts.json'), 'utf8'));
+    assert.equal(state.recovery.at(-1).status, 'pending');
+    assert.equal(state.recovery.at(-1).email, 'correct@example.com');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'payments.json'), 'utf8')).orders[0].customerEmail, 'wrong@example.com');
+  } finally { global.fetch = originalFetch; }
+});

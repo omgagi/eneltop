@@ -154,3 +154,44 @@ test('una nueva oferta pagada actualiza la ficha existente y el reembolso restau
   payments.applyWebhook('msg_upgrade_refund', { type: 'refund.succeeded', data: { payment_id: 'pay_upgrade' } });
   assert.equal(payments.publicRanking()[0].bid, 4.44);
 });
+
+test('el checkout exige correo verificado y el puesto conserva ese propietario aunque Dodo use otro correo', async () => {
+  const key = path.join(directory, 'dodo-live-api-key');
+  fs.writeFileSync(key, 'a'.repeat(40), { mode: 0o600 });
+  const originalFetch = global.fetch;
+  let payload;
+  global.fetch = async (_url, options) => {
+    payload = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ checkout_url: 'https://checkout.dodopayments.com/session/cks_test', session_id: 'cks_test' }) };
+  };
+  const body = { name: 'Verificado', description: 'Proyecto', url: 'https://example.org/',
+    category: 'Otros', cents: 50, email: 'owner@example.com' };
+  const { Readable } = require('node:stream');
+  const request = () => {
+    const stream = Readable.from([Buffer.from(JSON.stringify(body))]);
+    stream.headers = { origin: 'https://eneltop.com', 'content-type': 'application/json' };
+    return stream;
+  };
+  const response = () => ({ status: 0, body: '', writeHead(status) { this.status = status; return this; },
+    end(body) { this.body = body; return this; } });
+  try {
+    const blocked = response();
+    await payments.checkout(request(), blocked, null);
+    assert.equal(blocked.status, 401);
+    const mismatch = response();
+    await payments.checkout(request(), mismatch, 'someoneelse@example.com');
+    assert.equal(mismatch.status, 403);
+    const accepted = response();
+    await payments.checkout(request(), accepted, 'owner@example.com');
+    assert.equal(accepted.status, 200);
+    assert.equal(payload.customer.email, 'owner@example.com');
+    const orderId = JSON.parse(accepted.body).orderId;
+    payments.applyWebhook('msg_verified_owner', { type: 'payment.succeeded', data: {
+      metadata: { eneltop_order_id: orderId }, checkout_session_id: 'cks_test', status: 'succeeded',
+      currency: 'USD', total_amount: 50, product_cart: [{ product_id: 'pdt_testproduct', quantity: 1 }],
+      payment_id: 'pay_verifiedowner', customer: { email: 'mistyped@example.com' }
+    } });
+    assert.equal(payments.ownedProjects('owner@example.com').some(item => item.id === orderId), true);
+    assert.equal(payments.ownedProjects('mistyped@example.com').some(item => item.id === orderId), false);
+  } finally { global.fetch = originalFetch; }
+});

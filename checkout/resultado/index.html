@@ -20,6 +20,10 @@
     .share-actions .primary,.ranking-link{background:#17576c;color:#fff;border-color:#17576c}
     .share-feedback{min-height:1.4em;font-size:14px}
     .ranking-link{display:inline-block;margin-top:22px}
+    .account-next{margin:26px auto 0;padding:20px;border:1px solid #dbe4ed;border-radius:18px;background:#f2f8fb}
+    .account-next[hidden]{display:none}
+    .account-next p{margin:0 0 14px;color:#33485d}
+    .account-next a{display:inline-block;background:#17576c;color:#fff;text-decoration:none;border-radius:999px;padding:12px 20px;font-weight:800}
     #invoice-link{display:block;width:max-content;max-width:100%;margin:18px auto 0;color:#17576c}
     @media(max-width:600px){.payment-result{margin:2vh 12px;padding:22px 18px}.share-actions button,.share-actions a{flex:1;text-align:center;white-space:nowrap}}
   </style>
@@ -43,7 +47,7 @@
       <p id="share-feedback" class="share-feedback" role="status" aria-live="polite"></p>
     </section>
     <a id="ranking-link" class="ranking-link" href="/">Ver mi puesto en el ranking</a>
-    <p><a href="/cuenta/">Gestionar mi puesto con mi correo</a></p>
+    <section id="account-next" class="account-next" hidden><p>¿Quieres corregir la URL o el logo más adelante? Entra con el correo que verificaste antes de pagar. No necesitas contraseña.</p><a href="/cuenta/">Gestionar mi puesto →</a></section>
     <a id="invoice-link" href="#" target="_blank" rel="noopener noreferrer" hidden>Ver factura de Dodo Payments</a>
   </main>
   <script>
@@ -107,6 +111,7 @@
             ?`Tu proyecto ocupa el #${order.share.rank} de ${order.share.category}.`
             :'Tu proyecto ya aparece en '+order.category+'.';
           $('ranking-link').href='/?proyecto='+encodeURIComponent(id)+'#ranking';
+          $('account-next').hidden=false;
           if(order.share)updateShare(order.share);else $('share-panel').hidden=true;
           if(order.invoiceUrl){$('invoice-link').href=order.invoiceUrl;$('invoice-link').hidden=false}
           setTimeout(check,30000);return;

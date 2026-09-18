@@ -51,6 +51,11 @@ function ownedProjects(email) {
     .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) =>
       ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100, logo: logo || fallbackLogo || null }));
 }
+function reviewableOrder(id, email) {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return false;
+  return readState().orders.some(order => order.id === id && order.status === 'paid' &&
+    !order.hiddenFromRanking && order.customerEmail !== email);
+}
 
 function editOwnedProject(email, id, input) {
   const state = readState();
@@ -106,17 +111,22 @@ function validate(input) {
   return { name, description, category, cents, url: url.href };
 }
 
-async function checkout(request, response) {
+async function checkout(request, response, verifiedEmail) {
   if (!enabled()) return send(response, 503, { error: 'Los pagos aún no están disponibles.' });
   if (!['https://eneltop.com', 'https://www.eneltop.com'].includes(request.headers.origin) ||
       request.headers['sec-fetch-site'] === 'cross-site' || !String(request.headers['content-type'] || '').startsWith('application/json')) {
     return send(response, 403, { error: 'Solicitud no permitida' });
   }
+  if (typeof verifiedEmail !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(verifiedEmail))
+    return send(response, 401, { error: 'Verifica tu correo antes de continuar al pago.' });
   let details, uploadedLogo;
-  try { const input = await readJson(request, 450_000); details = validate(input); uploadedLogo = input.logo || null; }
+  try { const input = await readJson(request, 450_000);
+    if (String(input.email || '').trim().toLowerCase() !== verifiedEmail) return send(response, 403, { error: 'El correo del pago debe ser el que verificaste.' });
+    details = validate(input); uploadedLogo = input.logo || null; }
   catch { return send(response, 400, { error: 'Revisa los datos del proyecto y el importe.' }); }
   const state = readState();
-  const order = { ...details, id: crypto.randomUUID(), status: 'pending', createdAt: new Date().toISOString() };
+  const order = { ...details, id: crypto.randomUUID(), status: 'pending', customerEmail: verifiedEmail,
+    verifiedEmail: true, createdAt: new Date().toISOString() };
   if (uploadedLogo) {
     try { order.logo = avatars.saveUpload(order.id, uploadedLogo); }
     catch { return send(response, 400, { error: 'La imagen no es válida. Usa JPG, PNG o WebP de hasta 3 MB.' }); }
@@ -134,6 +144,7 @@ async function createDodoCheckout(order, response) {
       method: 'POST', signal: AbortSignal.timeout(12000),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 eneltop.com' },
       body: JSON.stringify({ product_cart: [{ product_id: productId, quantity: 1, amount: order.cents }],
+        customer: { email: order.customerEmail },
         return_url: `https://eneltop.com/checkout/resultado/?pedido=${order.id}`,
         metadata: { eneltop_order_id: order.id } })
     });
@@ -164,7 +175,8 @@ function bidForOwnedProject(email, id, cents, response) {
   if (!Number.isSafeInteger(cents) || cents < 50 || cents <= (original.rankingCents ?? original.cents))
     return send(response, 400, { error: 'La nueva oferta debe superar la actual y ser de al menos $0,50.' });
   const order = { name: original.name, description: original.description, url: original.url, category: original.category,
-    cents, id: crypto.randomUUID(), status: 'pending', upgradeOf: id, customerEmail: email, createdAt: new Date().toISOString() };
+    cents, id: crypto.randomUUID(), status: 'pending', upgradeOf: id, customerEmail: email,
+    verifiedEmail: true, createdAt: new Date().toISOString() };
   state.orders.push(order); writeState(state);
   return createDodoCheckout(order, response);
 }
@@ -196,7 +208,10 @@ function applyPaymentSuccess(state, data, paidAt) {
   order.paidAmount = data.total_amount;
   order.invoiceUrl = invoiceUrl(data.invoice_url);
   const email = String(data.customer?.email || '').trim().toLowerCase();
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) order.customerEmail = email;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) {
+    order.payerEmail = email;
+    if (!order.verifiedEmail) order.customerEmail = email;
+  }
   if (order.upgradeOf) {
     const original = state.orders.find(item => item.id === order.upgradeOf && item.status === 'paid');
     if (original && order.customerEmail === original.customerEmail) {
@@ -254,7 +269,7 @@ function reconcileEvents(eventsFile) {
     const link = invoiceUrl(data.invoice_url);
     if (order && !order.invoiceUrl && link) { order.invoiceUrl = link; recovered++; }
     const email = String(data.customer?.email || '').trim().toLowerCase();
-    if (order && !order.customerEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) {
+    if (order && !order.customerEmail && !order.verifiedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) {
       order.customerEmail = email; recovered++;
     }
   }
@@ -284,4 +299,4 @@ function shareProject(id) {
     logo: project.logo, url: `https://eneltop.com/p/${id}` };
 }
 
-module.exports = { enabled, publicRanking, ownedProjects, editOwnedProject, bidForOwnedProject, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send, readJson };
+module.exports = { enabled, publicRanking, ownedProjects, reviewableOrder, editOwnedProject, bidForOwnedProject, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send, readJson };
