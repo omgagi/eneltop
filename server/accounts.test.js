@@ -55,6 +55,7 @@ test('el acceso exige correo configurado, consume el enlace una sola vez y cierr
 
 test('usa Postmark cuando se configura un token de servidor', async () => {
   fs.writeFileSync(path.join(directory, 'postmark-server-token'), 'postmark-test-token', { mode: 0o600 });
+  process.env.ENELTOP_MAIL_PROVIDER = 'postmark';
   const originalFetch = global.fetch;
   let endpoint, payload;
   global.fetch = async (url, options) => { endpoint = url; payload = JSON.parse(options.body); return { ok: true }; };
@@ -65,5 +66,5 @@ test('usa Postmark cuando se configura un token de servidor', async () => {
     assert.equal(endpoint, 'https://api.postmarkapp.com/email');
     assert.equal(payload.To, 'postmark@example.com');
     assert.match(payload.TextBody, /\/cuenta\/\?token=/);
-  } finally { global.fetch = originalFetch; }
+  } finally { global.fetch = originalFetch; delete process.env.ENELTOP_MAIL_PROVIDER; }
 });

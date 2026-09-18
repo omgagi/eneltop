@@ -49,7 +49,8 @@ async function sendAccess(email, link) {
   const subject = 'Accede a tu cuenta de EnElTop';
   const text = `Abre este enlace para acceder a tus proyectos en EnElTop:\n\n${link}\n\nEl enlace caduca en 15 minutos. Si no lo solicitaste, puedes ignorar este correo.`;
   let response;
-  if (fs.existsSync(postmarkKeyFile)) {
+  if (fs.existsSync(postmarkKeyFile) &&
+      (!fs.existsSync(mailKeyFile) || process.env.ENELTOP_MAIL_PROVIDER === 'postmark')) {
     const key = fs.readFileSync(postmarkKeyFile, 'utf8').trim();
     response = await fetch('https://api.postmarkapp.com/email', {
       method: 'POST', signal: AbortSignal.timeout(10000),
