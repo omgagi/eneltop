@@ -247,3 +247,20 @@ dialog{border:0;border-radius:17px;width:min(460px,calc(100% - 24px));padding:23
 .checkout-email-status.error{background:#fff0ed;color:#a13c29}
 .dark .checkout-code-step{background:#203849;border-color:#446070}
 .dark .checkout-code-step .checkout-resend-code{color:#a8dce9}
+/* Keep the two main destinations visible and readable on small screens. */
+.top-nav a:nth-of-type(2){background:#eaf3f7;color:#17566d;border-radius:999px;padding:9px 12px}
+@media(max-width:680px){
+  .site-header{gap:10px}
+  .top-nav{gap:10px;overflow:visible;white-space:nowrap}
+  .top-nav a{display:none}
+  .top-nav a:nth-of-type(-n+2){display:inline-flex;align-items:center;font-size:14px;line-height:1.2}
+  .top-nav a:nth-of-type(n+3){display:none}
+  .top-nav a:nth-of-type(2){padding:8px 10px}
+  .top-nav button{font-size:21px;min-width:25px}
+  #theme-toggle{display:none}
+}
+@media(max-width:360px){
+  .top-nav{gap:8px}
+  .top-nav a:nth-of-type(-n+2){display:inline-flex;font-size:13px}
+  #theme-toggle{display:none}
+}
