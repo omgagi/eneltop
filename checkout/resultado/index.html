@@ -11,21 +11,23 @@
     .payment-result h1{margin:12px 0 8px;font-size:clamp(30px,6vw,46px)}
     .payment-result p{color:#607186;line-height:1.55}
     .payment-result .brand{justify-content:center}
-    .share-panel{margin-top:28px;text-align:left;border-top:1px solid var(--line);padding-top:25px}
+    .share-panel{margin-top:24px;text-align:left;border-top:1px solid var(--line);padding-top:20px}
     .share-panel[hidden],.payment-result a[hidden]{display:none}
-    .share-panel h2{font-size:25px;margin:0 0 8px}
-    .share-panel img{display:block;width:100%;height:auto;border:1px solid #dbe4ed;border-radius:18px;margin:19px 0}
+    .share-panel h2{font-size:21px;margin:0 0 5px}
+    .share-panel p{margin:0 0 14px}
+    .share-content{display:flex;align-items:center;gap:18px}
+    .share-panel img{display:block;width:190px;max-width:38%;height:auto;border:1px solid #dbe4ed;border-radius:10px;flex:none}
     .share-actions{display:flex;flex-wrap:wrap;gap:10px}
-    .share-actions button,.share-actions a,.ranking-link{border:1px solid #cbd8e4;background:#fff;color:#17576c;border-radius:999px;padding:12px 18px;font:700 15px system-ui,sans-serif;text-decoration:none;cursor:pointer}
+    .share-actions button,.share-actions a,.ranking-link{border:1px solid #cbd8e4;background:#fff;color:#17576c;border-radius:999px;padding:10px 15px;font:700 14px system-ui,sans-serif;text-decoration:none;cursor:pointer}
     .share-actions .primary,.ranking-link{background:#17576c;color:#fff;border-color:#17576c}
-    .share-feedback{min-height:1.4em;font-size:14px}
+    .share-feedback{min-height:1.4em;font-size:14px;margin-top:10px!important}
     .ranking-link{display:inline-block;margin-top:22px}
     .account-next{margin:26px auto 0;padding:20px;border:1px solid #dbe4ed;border-radius:18px;background:#f2f8fb}
     .account-next[hidden]{display:none}
     .account-next p{margin:0 0 14px;color:#33485d}
     .account-next a{display:inline-block;background:#17576c;color:#fff;text-decoration:none;border-radius:999px;padding:12px 20px;font-weight:800}
     #invoice-link{display:block;width:max-content;max-width:100%;margin:18px auto 0;color:#17576c}
-    @media(max-width:600px){.payment-result{margin:2vh 12px;padding:22px 18px}.share-actions button,.share-actions a{flex:1;text-align:center;white-space:nowrap}}
+    @media(max-width:600px){.payment-result{margin:2vh 12px;padding:22px 18px}.share-content{gap:12px}.share-panel img{width:120px;max-width:34%}.share-actions{gap:7px}.share-actions button,.share-actions a{padding:9px 11px;text-align:center}}
   </style>
 </head>
 <body>
@@ -35,14 +37,15 @@
     <p id="result-message">Tu proyecto se publicará cuando recibamos la confirmación de Dodo Payments.</p>
     <section id="share-panel" class="share-panel" aria-labelledby="share-title" hidden>
       <h2 id="share-title">¡Comparte tu puesto!</h2>
-      <p id="share-description">Tu tarjeta está lista.</p>
-      <img id="share-preview" alt="Tarjeta de tu puesto en eneltop.com" width="1200" height="630">
-      <div class="share-actions">
-        <button id="share-native" class="primary" type="button">Compartir mi puesto →</button>
-        <button id="copy-link" type="button">Copiar enlace</button>
-        <a id="download-image" href="#" download="mi-puesto-eneltop.png">Descargar imagen</a>
-        <a id="share-whatsapp" href="#" target="_blank" rel="noopener noreferrer">WhatsApp</a>
-        <a id="share-x" href="#" target="_blank" rel="noopener noreferrer">X</a>
+      <p id="share-description">Comparte tu puesto con tus contactos.</p>
+      <div class="share-content">
+        <img id="share-preview" alt="Vista previa de tu tarjeta de eneltop.com" width="1200" height="630">
+        <div class="share-actions">
+          <button id="share-instagram" class="primary" type="button">Instagram</button>
+          <a id="share-facebook" href="#" target="_blank" rel="noopener noreferrer">Facebook</a>
+          <button id="copy-link" type="button">Copiar enlace</button>
+          <a id="download-image" href="#" download="mi-puesto-eneltop.png">Descargar imagen</a>
+        </div>
       </div>
       <p id="share-feedback" class="share-feedback" role="status" aria-live="polite"></p>
     </section>
@@ -63,7 +66,7 @@
       const url=share.url+`?puesto=${share.rank}&v=${Math.floor(Date.now()/60000)}`;
       const card=`/api/share/card?id=${encodeURIComponent(share.id)}&puesto=${share.rank}`;
       $('share-title').textContent=first?'¡Llegaste al #1!':`¡Ya estás en el #${share.rank}!`;
-      $('share-description').textContent='Comparte esta tarjeta y reta a tus contactos a entrar al ranking.';
+      $('share-description').textContent='Comparte tu puesto con tus contactos.';
       $('share-preview').src=card;
       $('download-image').href=card;
       const nextKey=share.id+':'+share.rank;
@@ -73,8 +76,7 @@
           .then(blob=>{if(blob&&cardKey===nextKey)cardFile=new File([blob],'mi-puesto-eneltop.png',{type:'image/png'})})
           .catch(()=>{});
       }
-      $('share-whatsapp').href='https://wa.me/?text='+encodeURIComponent(text+' '+url);
-      $('share-x').href='https://twitter.com/intent/tweet?text='+encodeURIComponent(text)+'&url='+encodeURIComponent(url);
+      $('share-facebook').href='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url);
       $('share-panel').hidden=false;
       return {text,url};
     }
@@ -89,14 +91,27 @@
     }
     async function copyLink(){
       const data=shareData();if(!data)return;
-      try{await navigator.clipboard.writeText(data.text+' '+data.url);$('share-feedback').textContent='Enlace y mensaje copiados.'}
-      catch{$('share-feedback').textContent='No se pudo copiar. Usa el enlace para compartir.'}
+      try{
+        if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(data.url);
+        else throw new Error('Clipboard unavailable');
+      }catch{
+        const input=document.createElement('textarea');
+        input.value=data.url;input.setAttribute('readonly','');
+        input.style.position='fixed';input.style.opacity='0';
+        document.body.appendChild(input);input.select();
+        const copied=document.execCommand('copy');input.remove();
+        if(!copied){$('share-feedback').textContent='No se pudo copiar el enlace. Ábrelo desde “Ver mi puesto en el ranking”.';return}
+      }
+      $('share-feedback').textContent='Enlace copiado.';
     }
-    $('share-native').addEventListener('click',async()=>{
+    $('share-instagram').addEventListener('click',async()=>{
       const data=shareData();if(!data)return;
-      if(!navigator.share)return copyLink();
-      const payload=cardFile&&navigator.canShare?.({files:[cardFile]})?{...data,files:[cardFile]}:data;
-      try{await navigator.share(payload)}catch(error){if(error.name!=='AbortError')$('share-feedback').textContent='No se pudo abrir el menú. Usa Copiar enlace.'}
+      if(cardFile&&navigator.share&&navigator.canShare?.({files:[cardFile]})){
+        try{await navigator.share({files:[cardFile],title:data.title,text:data.text});return}
+        catch(error){if(error.name==='AbortError')return}
+      }
+      $('download-image').click();
+      $('share-feedback').textContent='Imagen descargada. Súbela a Instagram para compartirla.';
     });
     $('copy-link').addEventListener('click',copyLink);
     async function check(){
