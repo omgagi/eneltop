@@ -52,19 +52,35 @@ function shareBox(project){
   actions.append(instagram,facebook,copy,download);body.append(image,actions);details.append(summary,body,status);return details;
 }
 async function prepareLogo(file){if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>3_000_000)throw new Error('Usa JPG, PNG o WebP de hasta 3 MB.');const objectUrl=URL.createObjectURL(file);try{const img=new Image();img.src=objectUrl;await img.decode();if(img.width<128||img.height<128)throw new Error('La imagen debe medir al menos 128 × 128 px.');const canvas=document.createElement('canvas');canvas.width=canvas.height=192;const size=Math.min(img.width,img.height);canvas.getContext('2d').drawImage(img,(img.width-size)/2,(img.height-size)/2,size,size,0,0,192,192);return canvas.toDataURL('image/png')}finally{URL.revokeObjectURL(objectUrl)}}
+let unreadTotal=0;
+function showUnreadCount(count){
+  unreadTotal=count;
+  const alert=$('unread-alert'),badge=$('unread-count');
+  alert.hidden=badge.hidden=count===0;
+  if(count){alert.textContent=`Tienes ${count} mensaje${count===1?'':'s'} sin leer →`;badge.textContent=count}
+  document.title=count?`(${count}) Mi cuenta · EnElTop`:'Mi cuenta · EnElTop';
+}
 async function loadInbox(){
   const data=await api('/api/account/messages');
+  showUnreadCount(data.threads.reduce((total,thread)=>total+(thread.unreadCount||0),0));
   const list=$('threads');list.replaceChildren();$('threads-empty').hidden=data.threads.length>0;
   for(const thread of data.threads){
-    const box=document.createElement('details');box.className='thread';
+    const box=document.createElement('details');box.className='thread'+(thread.unreadCount?' unread':'');
     const summary=document.createElement('summary');summary.textContent=`${thread.contactName} · ${thread.listingName}`;
+    if(thread.unreadCount){const badge=document.createElement('span');badge.className='thread-unread';badge.textContent=`${thread.unreadCount} nuevo${thread.unreadCount===1?'':'s'}`;summary.append(badge)}
     box.append(summary);
+    box.addEventListener('toggle',async()=>{
+      if(!box.open||!thread.unreadCount)return;
+      try{await api('/api/account/messages/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id})});showUnreadCount(Math.max(0,unreadTotal-thread.unreadCount));thread.unreadCount=0;box.classList.remove('unread');summary.querySelector('.thread-unread')?.remove()}
+      catch(error){console.error('No se pudo marcar el mensaje como leído',error)}
+    });
     for(const item of thread.messages){const bubble=document.createElement('div');bubble.className='bubble'+(item.mine?' mine':'');const body=document.createElement('div');body.textContent=item.text;const time=document.createElement('small');time.textContent=`${item.mine?'Tú':'Miembro'} · ${new Date(item.at).toLocaleString('es-ES')}`;bubble.append(body,time);box.append(bubble)}
     const form=document.createElement('form');const label=document.createElement('label');label.textContent='Responder';const input=document.createElement('textarea');input.required=true;input.maxLength=2000;const button=document.createElement('button');button.textContent='Enviar respuesta →';const status=document.createElement('div');status.className='message';status.hidden=true;status.setAttribute('role','status');form.append(label,input,button,status);
     form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;try{await api('/api/account/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,text:input.value})});await loadInbox()}catch(error){message(status,error.message,true)}finally{button.disabled=false}});
     box.append(form);list.append(box);
   }
 }
+setInterval(()=>{if(!$('account').hidden&&!document.hidden&&!document.querySelector('.thread[open]'))loadInbox().catch(()=>{})},30000);
 $('contact-form').addEventListener('submit',async event=>{event.preventDefault();const button=event.currentTarget.querySelector('button');button.disabled=true;try{await api('/api/account/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listingId:validContact,text:$('contact-text').value})});$('contact-form').hidden=true;$('contact-done').hidden=false;$('contact-done-text').textContent=`Tu mensaje está en el inbox del propietario de ${contactTarget?.name||'este puesto'}. Le enviaremos un aviso por correo.`}catch(error){message($('contact-status'),error.message,true)}finally{button.disabled=false}});
 $('login-form').addEventListener('submit',async e=>{e.preventDefault();const button=e.currentTarget.querySelector('button');button.disabled=true;try{await api('/api/auth/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('email').value,contact:validContact})});message($('login-message'),'Te enviamos un enlace de acceso. Revisa tu correo.')}catch(error){message($('login-message'),error.message,true)}finally{button.disabled=false}});
 $('logout').addEventListener('click',async()=>{const button=$('logout');button.disabled=true;try{await api('/api/auth/logout',{method:'POST'});location.assign('/')}catch(error){button.disabled=false;alert(`No se pudo cerrar la sesión: ${error.message}`)}});

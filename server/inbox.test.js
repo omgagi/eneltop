@@ -29,10 +29,16 @@ test('solo los miembros pueden escribir y cada participante ve su conversación 
   const received = inbox.list('owner@example.com')[0];
   assert.equal(received.contactName, 'Proyecto Dos');
   assert.equal(received.messages[0].text, 'Hola');
+  assert.equal(received.unreadCount, 1);
+  assert.equal(inbox.list('sender@example.com')[0].unreadCount, 0);
+  assert.throws(() => inbox.markRead('stranger@example.com', first.id), /Conversación no encontrada/);
+  assert.deepEqual(inbox.markRead('owner@example.com', first.id), { read: 1 });
+  assert.equal(inbox.list('owner@example.com')[0].unreadCount, 0);
   assert.equal(JSON.stringify(received).includes('sender@example.com'), false);
   assert.throws(() => inbox.send('stranger@example.com', { threadId: first.id, text: 'Intrusión' }), /Debes ser miembro/);
   assert.throws(() => inbox.send('other@example.com', { threadId: first.id, text: 'Intrusión' }), /Debes ser miembro/);
   inbox.send('owner@example.com', { threadId: first.id, text: 'Gracias' });
+  assert.equal(inbox.list('sender@example.com')[0].unreadCount, 1);
   assert.equal(inbox.pendingNotifications()[0].to, 'sender@example.com');
   inbox.send('sender@example.com', { listingId: ownerId, text: 'Otra pregunta' });
   assert.equal(inbox.list('sender@example.com').length, 1);

@@ -26,9 +26,24 @@ function list(email) {
       id: thread.id, listingId: thread.listingId, listingName: thread.listingName,
       contactName: thread.ownerEmail === email ? thread.senderName : thread.listingName,
       updatedAt: thread.updatedAt,
+      unreadCount: thread.messages.filter(item => item.from !== email && !item.readAt).length,
       messages: thread.messages.map(item => ({ id: item.id, mine: item.from === email,
         text: item.text, at: item.at }))
     }));
+}
+function markRead(email, threadId) {
+  if (!validId.test(threadId)) throw new Error('Conversación no encontrada.');
+  const state = read();
+  const thread = state.threads.find(item => item.id === threadId &&
+    (item.ownerEmail === email || item.senderEmail === email));
+  if (!thread) throw new Error('Conversación no encontrada.');
+  const unread = thread.messages.filter(item => item.from !== email && !item.readAt);
+  if (unread.length) {
+    const at = new Date().toISOString();
+    for (const item of unread) item.readAt = at;
+    save(state);
+  }
+  return { read: unread.length };
 }
 function send(email, input) {
   if (!payments.ownedProjects(email).length)
@@ -77,4 +92,4 @@ function markNotified(messageId) {
   save(state);
 }
 
-module.exports = { list, send, pendingNotifications, markNotified };
+module.exports = { list, send, markRead, pendingNotifications, markNotified };
