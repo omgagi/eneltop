@@ -13,4 +13,7 @@ visits.json
 visitor-secret
 dodo-live-api-key
 dodo-webhook-secret
+postmark-server-token
+resend-api-key
+accounts.json
 assets/avatars/
