@@ -32,6 +32,8 @@ function sharePage(request, response) {
   const image = `https://eneltop.com/api/share/card?id=${id}&puesto=${project.rank}`;
   const url = `https://eneltop.com/p/${id}`;
   const ranking = `/?proyecto=${id}#ranking`;
+  const contact = project.contactable ? `<a class="button contact" href="/cuenta/?contact=${id}">Contáctame →</a>` : '';
+  const external = `<a class="button secondary" href="${html(project.externalUrl)}" target="_blank" rel="noopener noreferrer">Visitar proyecto →</a>`;
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff' }).end(`<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -43,8 +45,8 @@ function sharePage(request, response) {
 <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${headline}">
 <meta name="twitter:description" content="${description}"><meta name="twitter:image" content="${image}">
-<style>body{margin:0;background:#f8fafc;color:#1d2a3d;font:18px system-ui,-apple-system,sans-serif}.wrap{max-width:880px;margin:7vh auto;padding:24px}.card{background:white;border:1px solid #dbe4ed;border-radius:28px;overflow:hidden;box-shadow:0 20px 55px #1d2a3d12}.card img{display:block;width:100%;height:auto}.content{padding:26px 36px 38px}.brand{color:#bd503f;font-weight:800;letter-spacing:.06em}.content h1{font-size:clamp(30px,6vw,54px);line-height:1.1;margin:12px 0}.content p{color:#607186;line-height:1.5}.button{display:inline-block;margin-top:14px;padding:15px 26px;border-radius:999px;background:#17576c;color:white;text-decoration:none;font-weight:800}@media(max-width:600px){.wrap{margin:2vh auto;padding:12px}.content{padding:22px}}</style>
-</head><body><main class="wrap"><div class="card"><img src="${image}" alt="Tarjeta de ${name} en el ranking de ${category}" width="1200" height="630"><div class="content"><div class="brand">ENELTOP.COM</div><h1>${headline}</h1><p>${name} está en el ranking de ${category}. La posición puede cambiar cuando llegan nuevas ofertas.</p><a class="button" href="${ranking}">Ver el ranking actual →</a></div></div></main><script>fetch('/api/visits',{method:'POST',cache:'no-store',credentials:'same-origin'}).catch(()=>{});</script></body></html>`);
+<style>body{margin:0;background:#f8fafc;color:#1d2a3d;font:18px system-ui,-apple-system,sans-serif}.wrap{max-width:880px;margin:7vh auto;padding:24px}.card{background:white;border:1px solid #dbe4ed;border-radius:28px;overflow:hidden;box-shadow:0 20px 55px #1d2a3d12}.card img{display:block;width:100%;height:auto}.content{padding:26px 36px 38px}.brand{color:#bd503f;font-weight:800;letter-spacing:.06em}.content h1{font-size:clamp(30px,6vw,54px);line-height:1.1;margin:12px 0}.content p{color:#607186;line-height:1.5}.button{display:inline-block;margin:14px 9px 0 0;padding:15px 26px;border-radius:999px;background:#17576c;color:white;text-decoration:none;font-weight:800}.button.secondary{background:#eaf2f6;color:#17576c}@media(max-width:600px){.wrap{margin:2vh auto;padding:12px}.content{padding:22px}}</style>
+</head><body><main class="wrap"><div class="card"><img src="${image}" alt="Tarjeta de ${name} en el ranking de ${category}" width="1200" height="630"><div class="content"><div class="brand">ENELTOP.COM</div><h1>${headline}</h1><p>${name} está en el ranking de ${category}. La posición puede cambiar cuando llegan nuevas ofertas.</p>${contact}${external}<a class="button secondary" href="${ranking}">Ver el ranking actual →</a></div></div></main><script>fetch('/api/visits',{method:'POST',cache:'no-store',credentials:'same-origin'}).catch(()=>{});</script></body></html>`);
 }
 
 function renderCard(project) {

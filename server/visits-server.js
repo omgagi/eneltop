@@ -6,6 +6,19 @@ const payments = require('./payments');
 const accounts = require('./accounts');
 const avatars = require('./avatars');
 const share = require('./share');
+const inbox = require('./inbox');
+const noticesInFlight = new Set();
+async function deliverInboxNotices() {
+  for (const notice of inbox.pendingNotifications()) {
+    if (noticesInFlight.has(notice.messageId)) continue;
+    noticesInFlight.add(notice.messageId);
+    try { await accounts.sendInboxNotice(notice.to, notice.listingName); inbox.markNotified(notice.messageId); }
+    catch (error) { console.error('Inbox notice failed:', error.message); }
+    finally { noticesInFlight.delete(notice.messageId); }
+  }
+}
+setTimeout(() => deliverInboxNotices().catch(console.error), 5000);
+setInterval(() => deliverInboxNotices().catch(console.error), 60 * 1000);
 setTimeout(() => { try { payments.refreshAvatars(); } catch (error) { console.error(error); } }, 1000);
 setInterval(() => { try { payments.refreshAvatars(); } catch (error) { console.error(error); } }, 15 * 60 * 1000);
 
@@ -169,6 +182,22 @@ const server = http.createServer((request, response) => {
   if (request.url?.startsWith('/api/auth/verify?') && request.method === 'POST') return accounts.verify(request, response);
   if (request.url === '/api/auth/logout' && request.method === 'POST') return accounts.logout(request, response);
   if (request.url === '/api/account' && request.method === 'GET') return accounts.account(request, response);
+  if (request.url === '/api/account/messages' && request.method === 'GET') {
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    return payments.send(response, 200, { threads: inbox.list(email) });
+  }
+  if (request.url === '/api/account/messages' && request.method === 'POST') {
+    if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    return payments.readJson(request, 4000).then(input => {
+      const result = inbox.send(email, input || {});
+      setImmediate(() => deliverInboxNotices().catch(console.error));
+      return payments.send(response, 200, result);
+    })
+      .catch(error => payments.send(response, 400, { error: error.message }));
+  }
   if (request.url === '/api/account/recovery' && request.method === 'POST') return accounts.requestRecovery(request, response);
   if (request.url?.startsWith('/api/account/bid/') && request.method === 'POST') {
     if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });

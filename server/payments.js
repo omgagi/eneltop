@@ -40,9 +40,9 @@ function refreshAvatars() {
 function publicRanking() {
   const orders = readState().orders;
   avatars.enrichMissing(orders, updateAvatar);
-  return orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking).map(({ id, name, description, url, category, cents, rankingCents, paidAt, paidOrder, rankedAt, logo, fallbackLogo }) => ({
+  return orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking).map(({ id, name, description, url, category, cents, rankingCents, paidAt, paidOrder, rankedAt, logo, fallbackLogo, customerEmail }) => ({
     id, name, description, url, category, bid: (rankingCents ?? cents) / 100, paidAt, paidOrder, rankedAt,
-    logo: logo || fallbackLogo || null, profileImage: Boolean(logo)
+    logo: logo || fallbackLogo || null, profileImage: Boolean(logo), contactable: Boolean(customerEmail)
   }));
 }
 
@@ -51,6 +51,12 @@ function ownedProjects(email) {
     .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) =>
       ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100,
         logo: logo || fallbackLogo || null, rank: shareProject(id)?.rank || null }));
+}
+function messageRecipient(id) {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  const order = readState().orders.find(item => item.id === id && item.status === 'paid' &&
+    !item.hiddenFromRanking && item.customerEmail);
+  return order ? { email: order.customerEmail, name: order.name } : null;
 }
 function reviewableOrder(id, email) {
   if (!/^[0-9a-f-]{36}$/.test(id)) return false;
@@ -297,7 +303,8 @@ function shareProject(id) {
   const rank = 1 + projects.filter(item => item.category === project.category &&
     (item.bid > project.bid || (item.bid === project.bid && item.id !== project.id && before(item)))).length;
   return { id, name: project.name, category: project.category, rank, bid: project.bid,
-    logo: project.logo, url: `https://eneltop.com/p/${id}` };
+    logo: project.logo, url: `https://eneltop.com/p/${id}`, externalUrl: project.url,
+    contactable: project.contactable };
 }
 
-module.exports = { enabled, publicRanking, ownedProjects, reviewableOrder, editOwnedProject, bidForOwnedProject, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send, readJson };
+module.exports = { enabled, publicRanking, ownedProjects, messageRecipient, reviewableOrder, editOwnedProject, bidForOwnedProject, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send, readJson };

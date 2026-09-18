@@ -73,6 +73,10 @@ function sendAccess(email, link) {
   return sendEmail(email, 'Accede a tu cuenta de EnElTop',
     `Abre este enlace para acceder a tus proyectos en EnElTop:\n\n${link}\n\nEl enlace caduca en 15 minutos. Si no lo solicitaste, puedes ignorar este correo.`);
 }
+function sendInboxNotice(email, listingName) {
+  return sendEmail(email, 'Tienes un mensaje nuevo en EnElTop',
+    `Tienes un mensaje nuevo sobre ${listingName} en tu inbox de EnElTop.\n\nLéelo y responde aquí: ${site}/cuenta/#inbox\n\nTu correo no se muestra a otros miembros.`);
+}
 function requestAllowed(state, email, ip) {
   return state.requests.filter(item => item.email === email && item.at > now() - 900000).length < 3 &&
     state.requests.filter(item => item.ip === hash(ip) && item.at > now() - 3600000).length < 15;
@@ -97,7 +101,8 @@ async function requestLink(request, response) {
   if (!requestAllowed(state, email, ip))
     return payments.send(response, 429, { error: 'Espera unos minutos antes de solicitar otro enlace.' });
   const token = crypto.randomBytes(32).toString('base64url');
-  const link = `${site}/cuenta/?token=${token}`;
+  const contact = /^[0-9a-f-]{36}$/.test(body.contact || '') ? `&contact=${body.contact}` : '';
+  const link = `${site}/cuenta/?token=${token}${contact}`;
   recordRequest(state, email, ip);
   state.links.push({ hash: hash(token), email, expires: now() + 900000 });
   save(state);
@@ -202,4 +207,4 @@ async function requestRecovery(request, response) {
   return payments.send(response, 200, { ok: true });
 }
 
-module.exports = { requestLink, requestCheckoutCode, verifyCheckoutCode, requestRecovery, verify, logout, account, currentEmail, secureOrigin };
+module.exports = { requestLink, requestCheckoutCode, verifyCheckoutCode, requestRecovery, verify, logout, account, currentEmail, secureOrigin, sendInboxNotice };
