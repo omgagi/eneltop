@@ -208,7 +208,18 @@ function orderStatus(id) {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
   const order = readState().orders.find(item => item.id === id);
   return order ? { status: order.status, name: order.name, cents: order.cents, category: order.category,
-    invoiceUrl: order.status === 'paid' ? order.invoiceUrl || null : null } : null;
+    invoiceUrl: order.status === 'paid' ? order.invoiceUrl || null : null,
+    share: order.status === 'paid' ? shareProject(id) : null } : null;
 }
 
-module.exports = { enabled, publicRanking, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, send };
+function shareProject(id) {
+  if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  const projects = publicRanking();
+  const project = projects.find(item => item.id === id);
+  if (!project) return null;
+  const rank = 1 + projects.filter(item => item.category === project.category && item.bid > project.bid).length;
+  return { id, name: project.name, category: project.category, rank, bid: project.bid,
+    logo: project.logo, url: `https://eneltop.com/p/${id}` };
+}
+
+module.exports = { enabled, publicRanking, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send };

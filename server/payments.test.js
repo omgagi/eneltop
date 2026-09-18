@@ -78,6 +78,20 @@ test('reiniciar el ranking conserva el cobro original y excluye pedidos anterior
   assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).orders[0].paidAmount, 387);
 });
 
+test('el puesto compartido cambia cuando otro proyecto supera la oferta', () => {
+  setOrder();
+  payments.applyWebhook('msg_first', event());
+  const id = '33b74c11-57ed-4ae2-a55e-2817b99514c9';
+  assert.equal(payments.shareProject(id).rank, 1);
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  state.orders.push({ id: '64df84f4-a579-47a0-9674-83c9b58c6b1e', name: 'Nuevo líder',
+    description: 'Proyecto', url: 'https://example.org/', category: 'Otros',
+    cents: 445, status: 'paid', paidAt: new Date().toISOString() });
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  assert.equal(payments.shareProject(id).rank, 2);
+  assert.equal(payments.orderStatus(id).share.rank, 2);
+});
+
 test('recupera un evento firmado que se había archivado sin publicar', () => {
   setOrder();
   const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));

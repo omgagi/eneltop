@@ -4,6 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const payments = require('./payments');
 const avatars = require('./avatars');
+const share = require('./share');
 setTimeout(() => { try { payments.refreshAvatars(); } catch (error) { console.error(error); } }, 1000);
 setInterval(() => { try { payments.refreshAvatars(); } catch (error) { console.error(error); } }, 15 * 60 * 1000);
 
@@ -148,6 +149,10 @@ function handleWaitlist(request, response) {
 }
 
 const server = http.createServer((request, response) => {
+  if (['GET', 'HEAD'].includes(request.method) && /^\/p\/[0-9a-f-]{36}(?:\/|\?|$)/.test(request.url || ''))
+    return share.sharePage(request, response);
+  if (['GET', 'HEAD'].includes(request.method) && request.url?.startsWith('/api/share/card?'))
+    return share.shareCard(request, response);
   if (request.method === 'GET' && request.url?.startsWith('/api/avatar/'))
     return avatars.serve(request.url.slice('/api/avatar/'.length), response);
   response.setHeader('Cache-Control', 'no-store');
