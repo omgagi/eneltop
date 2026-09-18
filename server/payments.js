@@ -49,7 +49,8 @@ function publicRanking() {
 function ownedProjects(email) {
   return readState().orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking && order.customerEmail === email)
     .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) =>
-      ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100, logo: logo || fallbackLogo || null }));
+      ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100,
+        logo: logo || fallbackLogo || null, rank: shareProject(id)?.rank || null }));
 }
 function reviewableOrder(id, email) {
   if (!/^[0-9a-f-]{36}$/.test(id)) return false;
