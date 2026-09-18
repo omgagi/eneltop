@@ -52,3 +52,18 @@ test('el acceso exige correo configurado, consume el enlace una sola vez y cierr
     assert.equal(accounts.currentEmail(request('/api/account', undefined, cookie)), null);
   } finally { global.fetch = originalFetch; }
 });
+
+test('usa Postmark cuando se configura un token de servidor', async () => {
+  fs.writeFileSync(path.join(directory, 'postmark-server-token'), 'postmark-test-token', { mode: 0o600 });
+  const originalFetch = global.fetch;
+  let endpoint, payload;
+  global.fetch = async (url, options) => { endpoint = url; payload = JSON.parse(options.body); return { ok: true }; };
+  try {
+    const sent = response();
+    await accounts.requestLink(request('/api/auth/request', { email: 'postmark@example.com' }), sent);
+    assert.equal(sent.status, 200);
+    assert.equal(endpoint, 'https://api.postmarkapp.com/email');
+    assert.equal(payload.To, 'postmark@example.com');
+    assert.match(payload.TextBody, /\/cuenta\/\?token=/);
+  } finally { global.fetch = originalFetch; }
+});

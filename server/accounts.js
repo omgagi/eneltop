@@ -6,6 +6,7 @@ const payments = require('./payments');
 const directory = process.env.ENELTOP_DATA_DIR || '/var/lib/eneltop';
 const file = path.join(directory, 'accounts.json');
 const mailKeyFile = process.env.ENELTOP_MAIL_KEY_FILE || path.join(directory, 'resend-api-key');
+const postmarkKeyFile = process.env.ENELTOP_POSTMARK_KEY_FILE || path.join(directory, 'postmark-server-token');
 const mailFrom = process.env.ENELTOP_MAIL_FROM || 'EnElTop <acceso@eneltop.com>';
 const site = 'https://eneltop.com';
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -45,14 +46,25 @@ function cookie(token, age) {
   return `eneltop_session=${token}; Max-Age=${age}; Path=/; Domain=eneltop.com; HttpOnly; Secure; SameSite=Lax`;
 }
 async function sendAccess(email, link) {
-  if (!fs.existsSync(mailKeyFile)) throw new Error('Email provider is not configured');
-  const key = fs.readFileSync(mailKeyFile, 'utf8').trim();
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST', signal: AbortSignal.timeout(10000),
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: mailFrom, to: [email], subject: 'Accede a tu cuenta de EnElTop',
-      text: `Abre este enlace para acceder a tus proyectos en EnElTop:\n\n${link}\n\nEl enlace caduca en 15 minutos. Si no lo solicitaste, puedes ignorar este correo.` })
-  });
+  const subject = 'Accede a tu cuenta de EnElTop';
+  const text = `Abre este enlace para acceder a tus proyectos en EnElTop:\n\n${link}\n\nEl enlace caduca en 15 minutos. Si no lo solicitaste, puedes ignorar este correo.`;
+  let response;
+  if (fs.existsSync(postmarkKeyFile)) {
+    const key = fs.readFileSync(postmarkKeyFile, 'utf8').trim();
+    response = await fetch('https://api.postmarkapp.com/email', {
+      method: 'POST', signal: AbortSignal.timeout(10000),
+      headers: { 'X-Postmark-Server-Token': key, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ From: mailFrom, To: email, Subject: subject, TextBody: text, MessageStream: 'outbound' })
+    });
+  } else {
+    if (!fs.existsSync(mailKeyFile)) throw new Error('Email provider is not configured');
+    const key = fs.readFileSync(mailKeyFile, 'utf8').trim();
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST', signal: AbortSignal.timeout(10000),
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: mailFrom, to: [email], subject, text })
+    });
+  }
   if (!response.ok) throw new Error(`Email provider returned ${response.status}`);
 }
 async function requestLink(request, response) {
@@ -62,7 +74,8 @@ async function requestLink(request, response) {
   try { body = await payments.readJson(request, 1000); } catch { return payments.send(response, 400, { error: 'Correo inválido' }); }
   const email = String(body.email || '').trim().toLowerCase();
   if (!validEmail(email)) return payments.send(response, 400, { error: 'Correo inválido' });
-  if (!fs.existsSync(mailKeyFile)) return payments.send(response, 503, { error: 'El acceso por correo estará disponible próximamente.' });
+  if (!fs.existsSync(postmarkKeyFile) && !fs.existsSync(mailKeyFile))
+    return payments.send(response, 503, { error: 'El acceso por correo estará disponible próximamente.' });
   const state = read(); prune(state);
   const ip = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || '').split(',')[0].trim();
   if (state.requests.filter(item => item.email === email && item.at > now() - 900000).length >= 3 ||
