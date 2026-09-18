@@ -9,7 +9,7 @@ setInterval(() => { try { payments.refreshAvatars(); } catch (error) { console.e
 
 const file = process.env.ENELTOP_VISITS_FILE || '/var/lib/eneltop/visits.json';
 const port = Number(process.env.ENELTOP_VISITS_PORT || 8788);
-const baseline = Number(process.env.ENELTOP_VISITS_BASELINE || 586);
+const baseline = Number(process.env.ENELTOP_VISITS_BASELINE || 0);
 const allowedOrigins = new Set(['https://eneltop.com', 'https://www.eneltop.com']);
 const secretFile = process.env.ENELTOP_VISITS_SECRET_FILE || path.join(path.dirname(file), 'visitor-secret');
 const waitlistFile = process.env.ENELTOP_WAITLIST_FILE || path.join(path.dirname(file), 'waitlist.json');

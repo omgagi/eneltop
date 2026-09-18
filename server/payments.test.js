@@ -59,6 +59,25 @@ test('publica la oferta original cuando Dodo cobra en moneda local', () => {
   assert.equal(payments.orderStatus('33b74c11-57ed-4ae2-a55e-2817b99514c9').status, 'paid');
 });
 
+test('reiniciar el ranking conserva el cobro original y excluye pedidos anteriores', () => {
+  setOrder();
+  payments.applyWebhook('msg_reset', event({ currency: 'EUR', total_amount: 387 }));
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  const order = state.orders[0];
+  order.rankingCents = 50;
+  order.rankedAt = '2026-09-18T12:00:00.000Z';
+  state.orders.push({ id: 'old-paid', name: 'Anterior', description: 'Archivado',
+    url: 'https://example.org/', category: 'Otros', cents: 55, status: 'paid',
+    paidAt: '2026-09-17T19:00:00.000Z', hiddenFromRanking: true });
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  const ranking = payments.publicRanking();
+  assert.equal(ranking.length, 1);
+  assert.equal(ranking[0].bid, 0.50);
+  assert.equal(ranking[0].rankedAt, '2026-09-18T12:00:00.000Z');
+  assert.equal(payments.orderStatus(order.id).cents, 444);
+  assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).orders[0].paidAmount, 387);
+});
+
 test('recupera un evento firmado que se había archivado sin publicar', () => {
   setOrder();
   const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));

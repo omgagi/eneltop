@@ -8,7 +8,6 @@ const stateFile = path.join(directory, 'payments.json');
 const apiKeyFile = process.env.ENELTOP_DODO_API_KEY_FILE || path.join(directory, 'dodo-live-api-key');
 const productId = process.env.ENELTOP_DODO_PRODUCT_ID || '';
 const categories = new Set(['Rankings', 'SEO', 'Marketing', 'Productividad', 'Agentes', 'Trading', 'Social Media', 'Otros', 'Desarrollo']);
-const editorialCents = new Set(Array.from({ length: 72 }, (_, rank) => 443 - Math.round(rank * 343 / 71)));
 
 function readState() {
   if (!fs.existsSync(stateFile)) return { orders: [], processed: [] };
@@ -41,8 +40,8 @@ function refreshAvatars() {
 function publicRanking() {
   const orders = readState().orders;
   avatars.enrichMissing(orders, updateAvatar);
-  return orders.filter(order => order.status === 'paid').map(({ id, name, description, url, category, cents, paidAt, logo, fallbackLogo }) => ({
-    id, name, description, url, category, bid: cents / 100, paidAt,
+  return orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking).map(({ id, name, description, url, category, cents, rankingCents, paidAt, rankedAt, logo, fallbackLogo }) => ({
+    id, name, description, url, category, bid: (rankingCents ?? cents) / 100, paidAt, rankedAt,
     logo: logo || fallbackLogo || null, profileImage: Boolean(logo)
   }));
 }
@@ -82,10 +81,11 @@ function validate(input) {
 }
 
 function reserved(state, cents) {
-  if (editorialCents.has(cents)) return true;
   const now = Date.now();
-  return state.orders.some(order => order.cents === cents && (order.status === 'paid' ||
-    (order.status === 'pending' && now - Date.parse(order.createdAt) < 24 * 60 * 60 * 1000)));
+  return state.orders.some(order => !order.hiddenFromRanking && (
+    (order.status === 'paid' && (order.rankingCents ?? order.cents) === cents) ||
+    (order.status === 'pending' && order.cents === cents && now - Date.parse(order.createdAt) < 24 * 60 * 60 * 1000)
+  ));
 }
 
 async function checkout(request, response) {
@@ -154,7 +154,8 @@ function applyPaymentSuccess(state, data, paidAt) {
       !data.product_cart?.some(item => item.product_id === productId && item.quantity === 1) ||
       typeof data.payment_id !== 'string' || !/^pay_[A-Za-z0-9]+$/.test(data.payment_id) ||
       state.orders.some(item => item.paymentId === data.payment_id) ||
-      state.orders.some(item => item.id !== order.id && item.status === 'paid' && item.cents === order.cents)) return false;
+      state.orders.some(item => item.id !== order.id && item.status === 'paid' &&
+        !item.hiddenFromRanking && (item.rankingCents ?? item.cents) === order.cents)) return false;
   order.status = 'paid';
   order.paymentId = data.payment_id;
   order.paidAt = paidAt;
