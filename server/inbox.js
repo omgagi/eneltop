@@ -73,13 +73,14 @@ function send(email, input) {
     }
   }
   const at = new Date().toISOString();
-  thread.messages.push({ id: crypto.randomUUID(), from: email, text, at });
+  thread.messages.push({ id: crypto.randomUUID(), from: email, text, at,
+    ...(thread.messages.length ? { notifiedAt: at } : {}) });
   thread.updatedAt = at;
   save(state);
   return { id: thread.id };
 }
 function pendingNotifications() {
-  return read().threads.flatMap(thread => thread.messages.filter(item => !item.notifiedAt).map(item => ({
+  return read().threads.flatMap(thread => thread.messages.slice(0, 1).filter(item => !item.notifiedAt).map(item => ({
     messageId: item.id, to: item.from === thread.ownerEmail ? thread.senderEmail : thread.ownerEmail,
     listingName: thread.listingName
   })));

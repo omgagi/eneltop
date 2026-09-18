@@ -47,9 +47,14 @@ function publicRanking() {
 }
 
 function ownedProjects(email) {
-  return readState().orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking && order.customerEmail === email)
+  const orders = readState().orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking);
+  const topByCategory = new Map();
+  for (const order of orders) topByCategory.set(order.category,
+    Math.max(topByCategory.get(order.category) || 0, order.rankingCents ?? order.cents));
+  return orders.filter(order => order.customerEmail === email)
     .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) =>
       ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100,
+        firstPlaceBid: Math.max(50, (topByCategory.get(category) || 0) + 1) / 100,
         logo: logo || fallbackLogo || null, rank: shareProject(id)?.rank || null }));
 }
 function messageRecipient(id) {

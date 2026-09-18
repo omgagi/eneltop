@@ -39,7 +39,7 @@ test('solo los miembros pueden escribir y cada participante ve su conversación 
   assert.throws(() => inbox.send('other@example.com', { threadId: first.id, text: 'Intrusión' }), /Debes ser miembro/);
   inbox.send('owner@example.com', { threadId: first.id, text: 'Gracias' });
   assert.equal(inbox.list('sender@example.com')[0].unreadCount, 1);
-  assert.equal(inbox.pendingNotifications()[0].to, 'sender@example.com');
+  assert.equal(inbox.pendingNotifications().length, 0);
   inbox.send('sender@example.com', { listingId: ownerId, text: 'Otra pregunta' });
   assert.equal(inbox.list('sender@example.com').length, 1);
   assert.deepEqual(inbox.list('sender@example.com')[0].messages.map(message => message.mine), [true, false, true]);

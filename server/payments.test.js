@@ -92,6 +92,7 @@ test('el puesto compartido cambia cuando otro proyecto supera la oferta', () => 
   assert.equal(payments.shareProject(id).rank, 2);
   assert.equal(payments.orderStatus(id).share.rank, 2);
   assert.equal(payments.ownedProjects('owner@example.com')[0].rank, 2);
+  assert.equal(payments.ownedProjects('owner@example.com')[0].firstPlaceBid, 4.46);
 });
 
 test('recupera un evento firmado que se había archivado sin publicar', () => {
