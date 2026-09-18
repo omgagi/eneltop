@@ -40,10 +40,36 @@ function refreshAvatars() {
 function publicRanking() {
   const orders = readState().orders;
   avatars.enrichMissing(orders, updateAvatar);
-  return orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking).map(({ id, name, description, url, category, cents, rankingCents, paidAt, rankedAt, logo, fallbackLogo }) => ({
-    id, name, description, url, category, bid: (rankingCents ?? cents) / 100, paidAt, rankedAt,
+  return orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking).map(({ id, name, description, url, category, cents, rankingCents, paidAt, paidOrder, rankedAt, logo, fallbackLogo }) => ({
+    id, name, description, url, category, bid: (rankingCents ?? cents) / 100, paidAt, paidOrder, rankedAt,
     logo: logo || fallbackLogo || null, profileImage: Boolean(logo)
   }));
+}
+
+function ownedProjects(email) {
+  return readState().orders.filter(order => order.status === 'paid' && !order.hiddenFromRanking && order.customerEmail === email)
+    .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) =>
+      ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100, logo: logo || fallbackLogo || null }));
+}
+
+function editOwnedProject(email, id, input) {
+  const state = readState();
+  const order = state.orders.find(item => item.id === id && item.status === 'paid' && !item.hiddenFromRanking && item.customerEmail === email);
+  if (!order) return null;
+  if (input.url !== undefined) {
+    let url;
+    try { url = new URL(String(input.url)); } catch { throw new Error('URL inválida'); }
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.href.length > 500) throw new Error('URL inválida');
+    url.search = ''; url.hash = '';
+    order.url = url.href;
+  }
+  if (input.logo !== undefined) {
+    if (input.logo === null) { order.logo = null; order.avatarCheckedAt = null; }
+    else order.logo = avatars.saveManagedUpload(order.id, input.logo);
+  }
+  writeState(state);
+  if (input.logo === null || (input.url !== undefined && !order.logo)) avatars.enrichMissing([order], updateAvatar);
+  return { id: order.id, url: order.url, logo: order.logo || order.fallbackLogo || null };
 }
 
 function send(response, status, data) {
@@ -80,14 +106,6 @@ function validate(input) {
   return { name, description, category, cents, url: url.href };
 }
 
-function reserved(state, cents) {
-  const now = Date.now();
-  return state.orders.some(order => !order.hiddenFromRanking && (
-    (order.status === 'paid' && (order.rankingCents ?? order.cents) === cents) ||
-    (order.status === 'pending' && order.cents === cents && now - Date.parse(order.createdAt) < 24 * 60 * 60 * 1000)
-  ));
-}
-
 async function checkout(request, response) {
   if (!enabled()) return send(response, 503, { error: 'Los pagos aún no están disponibles.' });
   if (!['https://eneltop.com', 'https://www.eneltop.com'].includes(request.headers.origin) ||
@@ -98,7 +116,6 @@ async function checkout(request, response) {
   try { const input = await readJson(request, 450_000); details = validate(input); uploadedLogo = input.logo || null; }
   catch { return send(response, 400, { error: 'Revisa los datos del proyecto y el importe.' }); }
   const state = readState();
-  if (reserved(state, details.cents)) return send(response, 409, { error: 'Ese importe ya ocupa o está reservando un puesto. Elige otro.' });
   const order = { ...details, id: crypto.randomUUID(), status: 'pending', createdAt: new Date().toISOString() };
   if (uploadedLogo) {
     try { order.logo = avatars.saveUpload(order.id, uploadedLogo); }
@@ -106,13 +123,17 @@ async function checkout(request, response) {
   }
   state.orders.push(order);
   writeState(state);
+  return createDodoCheckout(order, response);
+}
+
+async function createDodoCheckout(order, response) {
   try {
     const key = fs.readFileSync(apiKeyFile, 'utf8').trim();
     if (key.length < 32) throw new Error('Invalid live key');
     const apiResponse = await fetch('https://live.dodopayments.com/checkouts', {
       method: 'POST', signal: AbortSignal.timeout(12000),
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 eneltop.com' },
-      body: JSON.stringify({ product_cart: [{ product_id: productId, quantity: 1, amount: details.cents }],
+      body: JSON.stringify({ product_cart: [{ product_id: productId, quantity: 1, amount: order.cents }],
         return_url: `https://eneltop.com/checkout/resultado/?pedido=${order.id}`,
         metadata: { eneltop_order_id: order.id } })
     });
@@ -135,6 +156,19 @@ async function checkout(request, response) {
   }
 }
 
+function bidForOwnedProject(email, id, cents, response) {
+  if (!enabled()) return send(response, 503, { error: 'Los pagos aún no están disponibles.' });
+  const state = readState();
+  const original = state.orders.find(item => item.id === id && item.status === 'paid' && !item.hiddenFromRanking && item.customerEmail === email);
+  if (!original) return send(response, 404, { error: 'Proyecto no encontrado' });
+  if (!Number.isSafeInteger(cents) || cents < 50 || cents <= (original.rankingCents ?? original.cents))
+    return send(response, 400, { error: 'La nueva oferta debe superar la actual y ser de al menos $0,50.' });
+  const order = { name: original.name, description: original.description, url: original.url, category: original.category,
+    cents, id: crypto.randomUUID(), status: 'pending', upgradeOf: id, customerEmail: email, createdAt: new Date().toISOString() };
+  state.orders.push(order); writeState(state);
+  return createDodoCheckout(order, response);
+}
+
 function invoiceUrl(value) {
   if (typeof value !== 'string') return null;
   try {
@@ -153,15 +187,29 @@ function applyPaymentSuccess(state, data, paidAt) {
       (data.currency === 'USD' && data.total_amount !== order.cents) || hasDiscount ||
       !data.product_cart?.some(item => item.product_id === productId && item.quantity === 1) ||
       typeof data.payment_id !== 'string' || !/^pay_[A-Za-z0-9]+$/.test(data.payment_id) ||
-      state.orders.some(item => item.paymentId === data.payment_id) ||
-      state.orders.some(item => item.id !== order.id && item.status === 'paid' &&
-        !item.hiddenFromRanking && (item.rankingCents ?? item.cents) === order.cents)) return false;
+      state.orders.some(item => item.paymentId === data.payment_id)) return false;
   order.status = 'paid';
   order.paymentId = data.payment_id;
   order.paidAt = paidAt;
+  order.paidOrder = state.processed.length;
   order.paidCurrency = data.currency;
   order.paidAmount = data.total_amount;
   order.invoiceUrl = invoiceUrl(data.invoice_url);
+  const email = String(data.customer?.email || '').trim().toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) order.customerEmail = email;
+  if (order.upgradeOf) {
+    const original = state.orders.find(item => item.id === order.upgradeOf && item.status === 'paid');
+    if (original && order.customerEmail === original.customerEmail) {
+      order.hiddenFromRanking = true;
+      if (order.cents > (original.rankingCents ?? original.cents)) {
+        original.rankingCents = order.cents;
+        original.rankedAt = paidAt;
+      }
+    } else {
+      // A payment made with a different email remains a visible purchase owned by its payer.
+      delete order.upgradeOf;
+    }
+  }
   return true;
 }
 
@@ -173,7 +221,13 @@ function applyWebhook(id, event) {
     if (!applyPaymentSuccess(state, data, new Date().toISOString())) console.error('Payment requires review:', id);
   } else if (event.type === 'refund.succeeded') {
     const order = state.orders.find(item => item.paymentId === data.payment_id);
-    if (order && order.status === 'paid') { order.status = 'refunded'; order.refundedAt = new Date().toISOString(); }
+    if (order && order.status === 'paid') {
+      order.status = 'refunded'; order.refundedAt = new Date().toISOString();
+      if (order.upgradeOf) {
+        const original = state.orders.find(item => item.id === order.upgradeOf);
+        if (original) original.rankingCents = Math.max(original.cents, ...state.orders.filter(item => item.upgradeOf === original.id && item.status === 'paid').map(item => item.cents));
+      }
+    }
   } else if (event.type === 'payment.failed' || event.type === 'payment.cancelled') {
     const order = state.orders.find(item => item.id === data.metadata?.eneltop_order_id);
     if (order && order.status === 'pending' && order.sessionId === data.checkout_session_id &&
@@ -199,6 +253,10 @@ function reconcileEvents(eventsFile) {
     const order = state.orders.find(item => item.status === 'paid' && item.paymentId === data.payment_id);
     const link = invoiceUrl(data.invoice_url);
     if (order && !order.invoiceUrl && link) { order.invoiceUrl = link; recovered++; }
+    const email = String(data.customer?.email || '').trim().toLowerCase();
+    if (order && !order.customerEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 254) {
+      order.customerEmail = email; recovered++;
+    }
   }
   if (recovered) writeState(state);
   return recovered;
@@ -209,7 +267,7 @@ function orderStatus(id) {
   const order = readState().orders.find(item => item.id === id);
   return order ? { status: order.status, name: order.name, cents: order.cents, category: order.category,
     invoiceUrl: order.status === 'paid' ? order.invoiceUrl || null : null,
-    share: order.status === 'paid' ? shareProject(id) : null } : null;
+    share: order.status === 'paid' ? shareProject(order.upgradeOf || id) : null } : null;
 }
 
 function shareProject(id) {
@@ -217,9 +275,13 @@ function shareProject(id) {
   const projects = publicRanking();
   const project = projects.find(item => item.id === id);
   if (!project) return null;
-  const rank = 1 + projects.filter(item => item.category === project.category && item.bid > project.bid).length;
+  const before = item => item.paidAt < project.paidAt ||
+    (item.paidAt === project.paidAt && ((item.paidOrder ?? Infinity) < (project.paidOrder ?? Infinity) ||
+      ((item.paidOrder ?? Infinity) === (project.paidOrder ?? Infinity) && item.id < project.id)));
+  const rank = 1 + projects.filter(item => item.category === project.category &&
+    (item.bid > project.bid || (item.bid === project.bid && item.id !== project.id && before(item)))).length;
   return { id, name: project.name, category: project.category, rank, bid: project.bid,
     logo: project.logo, url: `https://eneltop.com/p/${id}` };
 }
 
-module.exports = { enabled, publicRanking, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send };
+module.exports = { enabled, publicRanking, ownedProjects, editOwnedProject, bidForOwnedProject, refreshAvatars, checkout, applyWebhook, reconcileEvents, orderStatus, shareProject, send, readJson };

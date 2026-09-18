@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const payments = require('./payments');
+const accounts = require('./accounts');
 const avatars = require('./avatars');
 const share = require('./share');
 setTimeout(() => { try { payments.refreshAvatars(); } catch (error) { console.error(error); } }, 1000);
@@ -162,6 +163,30 @@ const server = http.createServer((request, response) => {
     catch (error) { console.error(error); return payments.send(response, 500, { error: 'Ranking unavailable' }); }
   }
   if (request.url === '/api/checkout' && request.method === 'POST') return payments.checkout(request, response);
+  if (request.url === '/api/auth/request' && request.method === 'POST') return accounts.requestLink(request, response);
+  if (request.url?.startsWith('/api/auth/verify?') && request.method === 'POST') return accounts.verify(request, response);
+  if (request.url === '/api/auth/logout' && request.method === 'POST') return accounts.logout(request, response);
+  if (request.url === '/api/account' && request.method === 'GET') return accounts.account(request, response);
+  if (request.url?.startsWith('/api/account/bid/') && request.method === 'POST') {
+    if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    const id = request.url.slice('/api/account/bid/'.length);
+    if (!/^[0-9a-f-]{36}$/.test(id)) return payments.send(response, 404, { error: 'Proyecto no encontrado' });
+    return payments.readJson(request, 1000).then(input => payments.bidForOwnedProject(email, id, input.cents, response))
+      .catch(() => payments.send(response, 400, { error: 'Importe inválido' }));
+  }
+  if (request.url?.startsWith('/api/account/projects/') && request.method === 'PATCH') {
+    if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    const id = request.url.slice('/api/account/projects/'.length);
+    if (!/^[0-9a-f-]{36}$/.test(id)) return payments.send(response, 404, { error: 'Proyecto no encontrado' });
+    return payments.readJson(request, 450_000).then(input => {
+      const result = payments.editOwnedProject(email, id, input);
+      return payments.send(response, result ? 200 : 404, result || { error: 'Proyecto no encontrado' });
+    }).catch(error => payments.send(response, 400, { error: error.message === 'URL inválida' ? error.message : 'Revisa la URL o la imagen.' }));
+  }
   if (request.url?.startsWith('/api/checkout/status?') && request.method === 'GET') {
     try { const id = new URL(request.url, 'http://localhost').searchParams.get('id') || ''; const status = payments.orderStatus(id); return payments.send(response, status ? 200 : 404, status || { error: 'Pedido no encontrado' }); }
     catch (error) { console.error(error); return payments.send(response, 500, { error: 'Estado no disponible' }); }

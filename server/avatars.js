@@ -158,7 +158,7 @@ function enrichMissing(orders, update) {
 }
 
 function serve(filename, response) {
-  if (!/^[0-9a-f-]{36}(?:-fallback)?\.(?:jpg|png|webp)$/.test(filename)) return response.writeHead(404).end();
+  if (!/^[0-9a-f-]{36}(?:-fallback|-u[0-9a-f]{16})?\.(?:jpg|png|webp)$/.test(filename)) return response.writeHead(404).end();
   try {
     const state = JSON.parse(fs.readFileSync(path.join(dataDir, 'payments.json'), 'utf8'));
     const imagePath = `/api/avatar/${filename}`;
@@ -185,4 +185,16 @@ function saveUpload(id, encoded) {
   return `/api/avatar/${filename}`;
 }
 
-module.exports = { enrichMissing, serve, saveUpload };
+function saveManagedUpload(id, encoded) {
+  if (!/^[0-9a-f-]{36}$/.test(id) || typeof encoded !== 'string' || encoded.length > 400_000 ||
+      !/^data:image\/(?:png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new Error('Invalid uploaded image');
+  const [, format, payload] = /^data:image\/(png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(encoded);
+  const data = Buffer.from(payload, 'base64');
+  if (data.length < 50 || data.length > 300_000 || imageExtension(data) !== format) throw new Error('Invalid uploaded image');
+  fs.mkdirSync(avatarDir, { recursive: true, mode: 0o755 });
+  const filename = `${id}-u${require('node:crypto').randomBytes(8).toString('hex')}.${format}`;
+  fs.writeFileSync(path.join(avatarDir, filename), data, { mode: 0o644, flag: 'wx' });
+  return `/api/avatar/${filename}`;
+}
+
+module.exports = { enrichMissing, serve, saveUpload, saveManagedUpload };

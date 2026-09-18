@@ -118,3 +118,39 @@ test('recupera el enlace de factura de un pago ya confirmado', () => {
   assert.equal(payments.reconcileEvents(eventsFile), 1);
   assert.equal(payments.orderStatus('33b74c11-57ed-4ae2-a55e-2817b99514c9').invoiceUrl, url);
 });
+
+test('dos pagos del mismo importe se publican y el primero confirmado conserva el puesto', () => {
+  setOrder();
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  state.orders.push({ ...state.orders[0], id: 'a29c59c4-aacf-44ec-84ec-1c908a700397', sessionId: 'cks_second' });
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  payments.applyWebhook('msg_same_first', event({ customer: { email: 'buyer@example.com' } }));
+  payments.applyWebhook('msg_same_second', event({ metadata: { eneltop_order_id: 'a29c59c4-aacf-44ec-84ec-1c908a700397' },
+    checkout_session_id: 'cks_second', payment_id: 'pay_second', customer: { email: 'other@example.com' } }));
+  assert.equal(payments.publicRanking().length, 2);
+  assert.equal(payments.shareProject(state.orders[0].id).rank, 1);
+  assert.equal(payments.shareProject(state.orders[1].id).rank, 2);
+  assert.equal(payments.ownedProjects('buyer@example.com').length, 1);
+  assert.equal(payments.ownedProjects('other@example.com').length, 1);
+  assert.equal(payments.editOwnedProject('other@example.com', state.orders[0].id, { url: 'https://changed.example/' }), null);
+  assert.equal(payments.editOwnedProject('buyer@example.com', state.orders[0].id, { url: 'https://changed.example/' }).url, 'https://changed.example/');
+});
+
+test('una nueva oferta pagada actualiza la ficha existente y el reembolso restaura su importe', () => {
+  setOrder();
+  payments.applyWebhook('msg_base', event({ customer: { email: 'owner@example.com' } }));
+  const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+  const base = state.orders[0];
+  const upgradeId = '302ee845-c088-49cd-afb7-992501d0ad8c';
+  state.orders.push({ ...base, id: upgradeId, cents: 500, status: 'pending',
+    sessionId: 'cks_upgrade', upgradeOf: base.id, paymentId: undefined });
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  payments.applyWebhook('msg_upgrade', event({ metadata: { eneltop_order_id: upgradeId },
+    checkout_session_id: 'cks_upgrade', total_amount: 500, payment_id: 'pay_upgrade',
+    customer: { email: 'owner@example.com' } }));
+  assert.equal(payments.publicRanking().length, 1);
+  assert.equal(payments.publicRanking()[0].bid, 5);
+  assert.equal(payments.orderStatus(upgradeId).share.id, base.id);
+  payments.applyWebhook('msg_upgrade_refund', { type: 'refund.succeeded', data: { payment_id: 'pay_upgrade' } });
+  assert.equal(payments.publicRanking()[0].bid, 4.44);
+});
