@@ -61,3 +61,19 @@ test('bloquear un miembro impide conversaciones actuales y nuevas', () => {
   assert.equal(inbox.list('owner@example.com')[0].blocked, true);
   assert.throws(() => inbox.send('third@example.com', { listingId: ownerId, text: 'Insistir' }), /No puedes contactar/);
 });
+
+test('una conexión requiere solicitud y aceptación', () => {
+  const fourthId = '44444444-4444-4444-8444-444444444444';
+  const state = JSON.parse(fs.readFileSync(path.join(directory, 'payments.json'), 'utf8'));
+  state.orders.push({ id: fourthId, name: 'Proyecto Cuatro', url: 'https://four.example/', category: 'Otros', cents: 97, status: 'paid', customerEmail: 'fourth@example.com' });
+  fs.writeFileSync(path.join(directory, 'payments.json'), JSON.stringify(state));
+  const thread = inbox.send('fourth@example.com', { listingId: ownerId, text: 'Conectemos' });
+  inbox.connectionAction('fourth@example.com', { threadId: thread.id, action: 'request' });
+  assert.equal(inbox.list('fourth@example.com').find(item => item.id === thread.id).connectionState, 'pending_sent');
+  assert.equal(inbox.connections('owner@example.com').requests[0].name, 'Proyecto Cuatro');
+  inbox.connectionAction('owner@example.com', { threadId: thread.id, action: 'accept' });
+  assert.equal(inbox.list('owner@example.com').find(item => item.id === thread.id).connectionState, 'connected');
+  assert.equal(inbox.connections('fourth@example.com').contacts[0].name, 'Proyecto Uno');
+  inbox.connectionAction('owner@example.com', { threadId: thread.id, action: 'remove' });
+  assert.equal(inbox.connections('owner@example.com').contacts.length, 0);
+});

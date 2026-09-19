@@ -196,6 +196,19 @@ const server = http.createServer((request, response) => {
     if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
     return payments.send(response, 200, { threads: inbox.list(email) });
   }
+  if (request.url === '/api/account/connections' && request.method === 'GET') {
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    return payments.send(response, 200, inbox.connections(email));
+  }
+  if (request.url === '/api/account/connections' && request.method === 'POST') {
+    if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    return payments.readJson(request, 1000).then(input =>
+      payments.send(response, 200, inbox.connectionAction(email, input || {})))
+      .catch(error => payments.send(response, 400, { error: error.message }));
+  }
   if (request.url === '/api/account/messages/read' && request.method === 'POST') {
     if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
     const email = accounts.currentEmail(request);

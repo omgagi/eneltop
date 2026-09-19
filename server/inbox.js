@@ -10,21 +10,20 @@ const activeMembers = new Map();
 const onlineWindow = 45_000;
 
 function setPresence(email, active) {
-  if (active) activeMembers.set(email, Date.now());
-  else activeMembers.delete(email);
+  activeMembers.set(email, { at: Date.now(), active });
 }
 function isOnline(email) {
-  const lastSeen = activeMembers.get(email) || 0;
-  if (Date.now() - lastSeen < onlineWindow) return true;
-  activeMembers.delete(email);
-  return false;
+  const presence = activeMembers.get(email);
+  return Boolean(presence?.active && Date.now() - presence.at < onlineWindow);
 }
 
 function read() {
-  if (!fs.existsSync(file)) return { threads: [], blocks: [] };
+  if (!fs.existsSync(file)) return { threads: [], blocks: [], connections: [], connectionRequests: [] };
   const state = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!Array.isArray(state.threads)) throw new Error('Invalid inbox state');
   state.blocks ||= [];
+  state.connections ||= [];
+  state.connectionRequests ||= [];
   return state;
 }
 function save(state) {
@@ -37,13 +36,22 @@ function list(email) {
   const state = read();
   return state.threads.filter(thread => thread.ownerEmail === email || thread.senderEmail === email)
     .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-    .map(thread => ({
+    .map(thread => {
+      const other = thread.ownerEmail === email ? thread.senderEmail : thread.ownerEmail;
+      const pair = [email, other].sort();
+      const request = state.connectionRequests.find(item => item.status === 'pending' &&
+        ((item.from === email && item.to === other) || (item.from === other && item.to === email)));
+      const connectionState = state.connections.some(item => item.members[0] === pair[0] && item.members[1] === pair[1])
+        ? 'connected' : request ? (request.from === email ? 'pending_sent' : 'pending_received') : 'none';
+      return ({
       id: thread.id, listingId: thread.listingId, listingName: thread.listingName,
       contactName: thread.ownerEmail === email ? thread.senderName : thread.listingName,
       contactLogo: thread.ownerEmail === email
         ? payments.ownedProjects(thread.senderEmail)[0]?.logo || null
         : payments.shareProject(thread.listingId)?.logo || null,
       contactOnline: isOnline(thread.ownerEmail === email ? thread.senderEmail : thread.ownerEmail),
+      contactLastSeen: activeMembers.get(other)?.at ? new Date(activeMembers.get(other).at).toISOString() : null,
+      connectionState,
       rejected: Boolean(thread.rejectedAt),
       blocked: state.blocks.some(item => item.by === email && item.target ===
         (thread.ownerEmail === email ? thread.senderEmail : thread.ownerEmail)),
@@ -51,7 +59,8 @@ function list(email) {
       unreadCount: thread.messages.filter(item => item.from !== email && !item.readAt).length,
       messages: thread.messages.map(item => ({ id: item.id, mine: item.from === email,
         text: item.text, at: item.at }))
-    }));
+    });
+    });
 }
 function markRead(email, threadId) {
   if (!validId.test(threadId)) throw new Error('Conversación no encontrada.');
@@ -121,9 +130,65 @@ function moderate(email, input) {
     thread.rejectedBy ||= email;
   } else if (!state.blocks.some(item => item.by === email && item.target === other)) {
     state.blocks.push({ by: email, target: other, at: new Date().toISOString() });
+    state.connections = state.connections.filter(item => !item.members.includes(email) || !item.members.includes(other));
+    state.connectionRequests = state.connectionRequests.filter(item =>
+      !((item.from === email && item.to === other) || (item.from === other && item.to === email)));
   }
   save(state);
   return { ok: true };
+}
+function profile(email) {
+  const project = payments.ownedProjects(email)[0];
+  return { name: project?.name || 'Miembro de EnElTop', logo: project?.logo || null };
+}
+function connectionAction(email, input) {
+  const threadId = String(input.threadId || '');
+  const action = String(input.action || '');
+  if (!validId.test(threadId) || !['request', 'accept', 'decline', 'remove'].includes(action))
+    throw new Error('Acción inválida.');
+  const state = read();
+  const thread = state.threads.find(item => item.id === threadId &&
+    (item.ownerEmail === email || item.senderEmail === email));
+  if (!thread) throw new Error('Conversación no encontrada.');
+  const other = thread.ownerEmail === email ? thread.senderEmail : thread.ownerEmail;
+  if (state.blocks.some(item => (item.by === email && item.target === other) ||
+    (item.by === other && item.target === email))) throw new Error('No puedes conectar con este miembro.');
+  const pair = [email, other].sort();
+  const connected = () => state.connections.some(item => item.members[0] === pair[0] && item.members[1] === pair[1]);
+  const pending = () => state.connectionRequests.find(item => item.status === 'pending' &&
+    ((item.from === email && item.to === other) || (item.from === other && item.to === email)));
+  if (action === 'request') {
+    if (!connected() && !pending()) state.connectionRequests.push({ id: crypto.randomUUID(), from: email, to: other, status: 'pending', at: new Date().toISOString() });
+  } else if (action === 'accept') {
+    const request = pending();
+    if (!request || request.to !== email) throw new Error('Solicitud no encontrada.');
+    request.status = 'accepted'; request.resolvedAt = new Date().toISOString();
+    if (!connected()) state.connections.push({ members: pair, at: request.resolvedAt });
+  } else if (action === 'decline') {
+    const request = pending();
+    if (!request || request.to !== email) throw new Error('Solicitud no encontrada.');
+    request.status = 'declined'; request.resolvedAt = new Date().toISOString();
+  } else {
+    state.connections = state.connections.filter(item => item.members[0] !== pair[0] || item.members[1] !== pair[1]);
+  }
+  save(state);
+  return { ok: true };
+}
+function connections(email) {
+  const state = read();
+  const threadFor = other => state.threads.find(thread =>
+    (thread.ownerEmail === email && thread.senderEmail === other) ||
+    (thread.senderEmail === email && thread.ownerEmail === other));
+  return {
+    requests: state.connectionRequests.filter(item => item.to === email && item.status === 'pending').map(item => {
+      const member = profile(item.from), thread = threadFor(item.from);
+      return { id: item.id, threadId: thread?.id || null, ...member };
+    }),
+    contacts: state.connections.filter(item => item.members.includes(email)).map(item => {
+      const other = item.members.find(member => member !== email), member = profile(other), thread = threadFor(other);
+      return { threadId: thread?.id || null, online: isOnline(other), ...member };
+    })
+  };
 }
 function pendingNotifications() {
   return read().threads.flatMap(thread => thread.messages.slice(0, 1).filter(item => !item.notifiedAt).map(item => ({
@@ -139,4 +204,4 @@ function markNotified(messageId) {
   save(state);
 }
 
-module.exports = { list, send, moderate, markRead, setPresence, pendingNotifications, markNotified };
+module.exports = { list, send, moderate, connectionAction, connections, markRead, setPresence, pendingNotifications, markNotified };
