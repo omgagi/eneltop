@@ -90,8 +90,10 @@ test('el puesto compartido cambia cuando otro proyecto supera la oferta', () => 
     cents: 445, status: 'paid', paidAt: new Date().toISOString() });
   fs.writeFileSync(stateFile, JSON.stringify(state));
   assert.equal(payments.shareProject(id).rank, 2);
+  assert.equal(payments.shareProject(id).overallRank, 2);
   assert.equal(payments.orderStatus(id).share.rank, 2);
   assert.equal(payments.ownedProjects('owner@example.com')[0].rank, 2);
+  assert.equal(payments.ownedProjects('owner@example.com')[0].overallRank, 2);
   assert.equal(payments.ownedProjects('owner@example.com')[0].firstPlaceBid, 4.46);
 });
 

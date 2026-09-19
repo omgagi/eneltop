@@ -52,10 +52,13 @@ function ownedProjects(email) {
   for (const order of orders) topByCategory.set(order.category,
     Math.max(topByCategory.get(order.category) || 0, order.rankingCents ?? order.cents));
   return orders.filter(order => order.customerEmail === email)
-    .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) =>
-      ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100,
+    .map(({ id, name, description, url, category, cents, rankingCents, logo, fallbackLogo }) => {
+      const shared = shareProject(id);
+      return ({ id, name, description, url, category, bid: (rankingCents ?? cents) / 100,
         firstPlaceBid: Math.max(50, (topByCategory.get(category) || 0) + 1) / 100,
-        logo: logo || fallbackLogo || null, rank: shareProject(id)?.rank || null }));
+        logo: logo || fallbackLogo || null, rank: shared?.rank || null,
+        overallRank: shared?.overallRank || null });
+    });
 }
 function messageRecipient(id) {
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
@@ -307,7 +310,9 @@ function shareProject(id) {
       ((item.paidOrder ?? Infinity) === (project.paidOrder ?? Infinity) && item.id < project.id)));
   const rank = 1 + projects.filter(item => item.category === project.category &&
     (item.bid > project.bid || (item.bid === project.bid && item.id !== project.id && before(item)))).length;
-  return { id, name: project.name, category: project.category, rank, bid: project.bid,
+  const overallRank = 1 + projects.filter(item => item.bid > project.bid ||
+    (item.bid === project.bid && item.id !== project.id && before(item))).length;
+  return { id, name: project.name, category: project.category, rank, overallRank, bid: project.bid,
     logo: project.logo, url: `https://eneltop.com/p/${id}`, externalUrl: project.url,
     contactable: project.contactable };
 }
