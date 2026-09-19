@@ -88,13 +88,14 @@ async function loadInbox(openThreadId=''){
     else if(thread.connectionState==='pending_received'){connect.textContent='Aceptar conexión';connect.classList.add('accept');connect.addEventListener('click',()=>connectionAction(thread.id,'accept'))}
     else{connect.textContent='+ Conectar';connect.addEventListener('click',()=>connectionAction(thread.id,'request'))}
     const menu=document.createElement('details');menu.className='chat-menu';const menuToggle=document.createElement('summary');menuToggle.setAttribute('aria-label','Opciones de conversación');menuToggle.textContent='⋮';const menuPanel=document.createElement('div');menuPanel.className='chat-menu-panel';
+    menu.addEventListener('toggle',()=>{if(menu.open)document.querySelectorAll('.chat-menu[open]').forEach(item=>{if(item!==menu)item.open=false})});
     const reject=document.createElement('button');reject.type='button';reject.className='chat-control';reject.textContent='Rechazar conversación';
     const block=document.createElement('button');block.type='button';block.className='chat-control danger';block.textContent='Bloquear miembro';menuPanel.append(reject,block);if(thread.connectionState==='connected'){const remove=document.createElement('button');remove.type='button';remove.className='chat-control';remove.textContent='Eliminar contacto';remove.addEventListener('click',()=>confirm('¿Eliminar a este miembro de tus contactos?')&&connectionAction(thread.id,'remove'));menuPanel.prepend(remove)}menu.append(menuToggle,menuPanel);controls.append(connect,menu);box.append(controls);
     const transcript=document.createElement('div');transcript.className='chat-transcript';for(const item of thread.messages)transcript.append(renderBubble(item));box.append(transcript);
     const closed=document.createElement('div');closed.className='chat-closed';closed.hidden=!(thread.rejected||thread.blocked);closed.textContent=thread.blocked?'Has bloqueado a este miembro.':'Esta conversación fue rechazada.';box.append(closed);
     const form=document.createElement('form');form.className='chat-composer';form.hidden=thread.rejected||thread.blocked;const input=document.createElement('textarea');input.required=true;input.maxLength=2000;input.rows=1;input.setAttribute('aria-label','Escribe un mensaje');input.placeholder='Escribe un mensaje';const button=document.createElement('button');button.setAttribute('aria-label','Enviar mensaje');button.textContent='➤';const status=document.createElement('div');status.className='message';status.hidden=true;status.setAttribute('role','status');form.append(input,button,status);
     form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;try{await api('/api/account/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,text:input.value})});await loadInbox(thread.id)}catch(error){message(status,error.message,true)}finally{button.disabled=false}});
-    const moderate=async(action)=>{const wording=action==='block'?'bloquear a este miembro':'rechazar y cerrar esta conversación';if(!confirm(`¿Quieres ${wording}?`))return;try{await api('/api/account/messages/moderate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,action})});await Promise.all([loadInbox(thread.id),loadConnections()])}catch(error){alert(error.message)}};
+    const moderate=async(action)=>{menu.open=false;const wording=action==='block'?'bloquear a este miembro':'rechazar y cerrar esta conversación';if(!confirm(`¿Quieres ${wording}?`))return;try{await api('/api/account/messages/moderate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,action})});await Promise.all([loadInbox(thread.id),loadConnections()])}catch(error){alert(error.message)}};
     reject.addEventListener('click',()=>moderate('reject'));block.addEventListener('click',()=>moderate('block'));
     box.append(form);list.append(box);if(thread.id===openThreadId){box.open=true;requestAnimationFrame(()=>{transcript.scrollTop=transcript.scrollHeight})}
   }
@@ -136,6 +137,8 @@ async function refreshInbox(){
   showUnreadCount(data.threads.reduce((total,thread)=>total+(thread.unreadCount||0),0));
 }
 setInterval(()=>refreshInbox().catch(console.error),8000);
+document.addEventListener('click',event=>{document.querySelectorAll('.chat-menu[open]').forEach(menu=>{if(!menu.contains(event.target))menu.open=false})});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')document.querySelectorAll('.chat-menu[open]').forEach(menu=>{menu.open=false})});
 async function updatePresence(active){
   await api('/api/account/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({active})});
 }
