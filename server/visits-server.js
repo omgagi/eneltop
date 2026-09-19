@@ -204,6 +204,14 @@ const server = http.createServer((request, response) => {
       payments.send(response, 200, inbox.markRead(email, input?.threadId)))
       .catch(error => payments.send(response, 400, { error: error.message }));
   }
+  if (request.url === '/api/account/messages/moderate' && request.method === 'POST') {
+    if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
+    const email = accounts.currentEmail(request);
+    if (!email) return payments.send(response, 401, { error: 'Inicia sesión con tu correo.' });
+    return payments.readJson(request, 1000).then(input =>
+      payments.send(response, 200, inbox.moderate(email, input || {})))
+      .catch(error => payments.send(response, 400, { error: error.message }));
+  }
   if (request.url === '/api/account/messages' && request.method === 'POST') {
     if (!accounts.secureOrigin(request)) return payments.send(response, 403, { error: 'Solicitud no permitida' });
     const email = accounts.currentEmail(request);

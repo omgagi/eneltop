@@ -14,7 +14,9 @@ fs.writeFileSync(path.join(directory, 'payments.json'), JSON.stringify({ orders:
   { id: ownerId, name: 'Proyecto Uno', url: 'https://one.example/', category: 'Otros',
     cents: 100, status: 'paid', customerEmail: 'owner@example.com' },
   { id: senderId, name: 'Proyecto Dos', url: 'https://two.example/', category: 'Otros',
-    cents: 99, status: 'paid', customerEmail: 'sender@example.com' }
+    cents: 99, status: 'paid', customerEmail: 'sender@example.com' },
+  { id: '33333333-3333-4333-8333-333333333333', name: 'Proyecto Tres', url: 'https://three.example/', category: 'Otros',
+    cents: 98, status: 'paid', customerEmail: 'third@example.com' }
 ], processed: [] }));
 
 test('solo los miembros pueden escribir y cada participante ve su conversación sin correos ajenos', () => {
@@ -48,4 +50,14 @@ test('solo los miembros pueden escribir y cada participante ve su conversación 
   inbox.send('sender@example.com', { listingId: ownerId, text: 'Otra pregunta' });
   assert.equal(inbox.list('sender@example.com').length, 1);
   assert.deepEqual(inbox.list('sender@example.com')[0].messages.map(message => message.mine), [true, false, true]);
+  assert.deepEqual(inbox.moderate('owner@example.com', { threadId: first.id, action: 'reject' }), { ok: true });
+  assert.equal(inbox.list('owner@example.com')[0].rejected, true);
+  assert.throws(() => inbox.send('sender@example.com', { threadId: first.id, text: '¿Sigues ahí?' }), /rechazada/);
+});
+
+test('bloquear un miembro impide conversaciones actuales y nuevas', () => {
+  const thread = inbox.send('third@example.com', { listingId: ownerId, text: 'Nuevo chat' });
+  inbox.moderate('owner@example.com', { threadId: thread.id, action: 'block' });
+  assert.equal(inbox.list('owner@example.com')[0].blocked, true);
+  assert.throws(() => inbox.send('third@example.com', { listingId: ownerId, text: 'Insistir' }), /No puedes contactar/);
 });

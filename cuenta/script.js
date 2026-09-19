@@ -79,10 +79,16 @@ async function loadInbox(openThreadId=''){
       try{await api('/api/account/messages/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id})});showUnreadCount(Math.max(0,unreadTotal-thread.unreadCount));thread.unreadCount=0;box.classList.remove('unread');summary.querySelector('.thread-unread')?.remove()}
       catch(error){console.error('No se pudo marcar el mensaje como leído',error)}
     });
-    for(const item of thread.messages)box.append(renderBubble(item));
-    const form=document.createElement('form');const label=document.createElement('label');label.textContent='Responder';const input=document.createElement('textarea');input.required=true;input.maxLength=2000;const button=document.createElement('button');button.textContent='Enviar respuesta →';const status=document.createElement('div');status.className='message';status.hidden=true;status.setAttribute('role','status');form.append(label,input,button,status);
+    const controls=document.createElement('div');controls.className='chat-controls';
+    const reject=document.createElement('button');reject.type='button';reject.className='chat-control';reject.textContent='Rechazar conversación';
+    const block=document.createElement('button');block.type='button';block.className='chat-control danger';block.textContent='Bloquear miembro';controls.append(reject,block);box.append(controls);
+    const transcript=document.createElement('div');transcript.className='chat-transcript';for(const item of thread.messages)transcript.append(renderBubble(item));box.append(transcript);
+    const closed=document.createElement('div');closed.className='chat-closed';closed.hidden=!(thread.rejected||thread.blocked);closed.textContent=thread.blocked?'Has bloqueado a este miembro.':'Esta conversación fue rechazada.';box.append(closed);
+    const form=document.createElement('form');form.className='chat-composer';form.hidden=thread.rejected||thread.blocked;const input=document.createElement('textarea');input.required=true;input.maxLength=2000;input.rows=1;input.setAttribute('aria-label','Escribe un mensaje');input.placeholder='Escribe un mensaje';const button=document.createElement('button');button.setAttribute('aria-label','Enviar mensaje');button.textContent='➤';const status=document.createElement('div');status.className='message';status.hidden=true;status.setAttribute('role','status');form.append(input,button,status);
     form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;try{await api('/api/account/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,text:input.value})});await loadInbox(thread.id)}catch(error){message(status,error.message,true)}finally{button.disabled=false}});
-    box.append(form);list.append(box);if(thread.id===openThreadId)box.open=true;
+    const moderate=async(action)=>{const wording=action==='block'?'bloquear a este miembro':'rechazar y cerrar esta conversación';if(!confirm(`¿Quieres ${wording}?`))return;try{await api('/api/account/messages/moderate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id,action})});await loadInbox(thread.id)}catch(error){alert(error.message)}};
+    reject.addEventListener('click',()=>moderate('reject'));block.addEventListener('click',()=>moderate('block'));
+    box.append(form);list.append(box);if(thread.id===openThreadId){box.open=true;requestAnimationFrame(()=>{transcript.scrollTop=transcript.scrollHeight})}
   }
 }
 async function refreshInbox(){
@@ -97,8 +103,9 @@ async function refreshInbox(){
     dot.hidden=!thread.contactOnline;presence.classList.toggle('online',thread.contactOnline);
     presence.textContent=thread.contactOnline?'Conectado ahora':`Sobre ${thread.listingName}`;
     const known=new Set([...box.querySelectorAll('[data-message-id]')].map(item=>item.dataset.messageId));
-    const form=box.querySelector('form');
-    for(const item of thread.messages)if(!known.has(item.id))box.insertBefore(renderBubble(item),form);
+    const transcript=box.querySelector('.chat-transcript');
+    for(const item of thread.messages)if(!known.has(item.id))transcript.append(renderBubble(item));
+    if(thread.messages.some(item=>!known.has(item.id)))transcript.scrollTop=transcript.scrollHeight;
     if(thread.unreadCount){
       await api('/api/account/messages/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId:thread.id})});
       thread.unreadCount=0;box.classList.remove('unread');box.querySelector('.thread-unread')?.remove();
