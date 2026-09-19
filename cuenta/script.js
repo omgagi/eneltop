@@ -2,7 +2,8 @@ const $=id=>document.getElementById(id);
 const contactId=new URLSearchParams(location.search).get('contact');
 const validContact=/^[0-9a-f-]{36}$/.test(contactId||'')?contactId:'';
 let contactTarget=null;
-const money=value=>'$'+Number(value).toFixed(2).replace('.',',');
+const locale=window.eneltopI18n?.locale||'es-ES';
+const money=value=>'$'+new Intl.NumberFormat(locale,{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value));
 async function api(url,options={}){const response=await fetch(url,{credentials:'same-origin',cache:'no-store',...options});const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar la solicitud.');return data}
 function message(node,text,error=false){node.hidden=false;node.textContent=text;node.classList.toggle('error',error)}
 function loginView(){ $('login').hidden=false;$('account').hidden=true;$('contact-view').hidden=true;$('logout').hidden=true;document.querySelector('footer').hidden=Boolean(validContact);if(validContact){$('login').querySelector('h1').textContent=contactTarget?`Escribe a ${contactTarget.name}`:'Contactar a un miembro';$('login-intro').textContent='Debes ser miembro del ranking para poder contactar a alguien. Accede con el correo que verificaste al pagar.'} }
@@ -60,7 +61,7 @@ function showUnreadCount(count){
   if(count){alert.textContent=`Tienes ${count} mensaje${count===1?'':'s'} sin leer →`;badge.textContent=count}
   document.title=count?`(${count}) Mi cuenta · EnElTop`:'Mi cuenta · EnElTop';
 }
-function renderBubble(item){const bubble=document.createElement('div');bubble.className='bubble'+(item.mine?' mine':'');bubble.dataset.messageId=item.id;const body=document.createElement('div');body.textContent=item.text;const time=document.createElement('small');time.textContent=`${item.mine?'Tú':'Miembro'} · ${new Date(item.at).toLocaleString('es-ES')}`;bubble.append(body,time);return bubble}
+function renderBubble(item){const bubble=document.createElement('div');bubble.className='bubble'+(item.mine?' mine':'');bubble.dataset.messageId=item.id;const body=document.createElement('div');body.textContent=item.text;const time=document.createElement('small');time.textContent=`${item.mine?'Tú':'Miembro'} · ${new Date(item.at).toLocaleString(locale)}`;bubble.append(body,time);return bubble}
 function presenceText(thread){if(thread.contactOnline)return 'Conectado ahora';if(thread.contactLastSeen){const minutes=Math.floor((Date.now()-Date.parse(thread.contactLastSeen))/60000);if(minutes<1)return 'Activo hace un momento';if(minutes<60)return `Activo hace ${minutes} min`;}return `Sobre ${thread.listingName}`}
 async function connectionAction(threadId,action){await api('/api/account/connections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threadId,action})});await Promise.all([loadInbox(threadId),loadConnections()])}
 async function loadInbox(openThreadId=''){

@@ -21,7 +21,7 @@ const projects=directoryEntries.map((entry,i)=>({
   fg:palette[i%palette.length][1]
 }));
 let paidProjects=[],paymentsReady=false;const targetProjectId=new URLSearchParams(location.search).get('proyecto');let targetApplied=false;function validSavedBid(value){const bid=Number(value),cents=Math.round(bid*100);return Number.isSafeInteger(cents)&&Math.abs(bid*100-cents)<0.000001&&bid>=MIN_PRICE}
-let category='Todas',period='all',page=1,query='',offer=0.51,automaticOffer=true;const pageSize=50;const $=id=>document.getElementById(id);const amountFormat=new Intl.NumberFormat('es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});const formattedAmount=n=>amountFormat.format(n);const money=n=>'$'+formattedAmount(n);
+let category='Todas',period='all',page=1,query='',offer=0.51,automaticOffer=true;const pageSize=50;const $=id=>document.getElementById(id);const amountFormat=new Intl.NumberFormat(window.eneltopI18n?.locale||'es-ES',{minimumFractionDigits:2,maximumFractionDigits:2});const formattedAmount=n=>amountFormat.format(n);const money=n=>'$'+formattedAmount(n);
 function readMoneyInput(input){const digits=input.value.replace(/\D/g,'');const cents=Number(digits);return Number.isSafeInteger(cents)?cents/100:null}
 function writeMoneyInput(input,amount){input.value=formattedAmount(amount);if(input.id==='claim-price')input.style.width=Math.max(4.9,input.value.length+0.3)+'ch';else input.style.removeProperty('width')}
 function normalizeMoneyInput(input){const amount=readMoneyInput(input);if(amount===null)return null;writeMoneyInput(input,amount);input.setSelectionRange(input.value.length,input.value.length);return amount}
